@@ -19,7 +19,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   })
 
   useEffect(() => {
-    if (!supabase) return undefined
+    const client = supabase
+    if (!client) return undefined
 
     let isMounted = true
     let authRevision = 0
@@ -33,7 +34,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
         return
       }
 
-      const { data } = await supabase
+      if (!client) return
+
+      const { data } = await client
         .from('profiles')
         .select('active')
         .eq('id', session.user.id)
@@ -46,9 +49,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
     }
 
-    void supabase.auth.getSession().then(({ data }) => hydrateSession(data.session))
+    void client.auth.getSession().then(({ data }) => hydrateSession(data.session))
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: subscription } = client.auth.onAuthStateChange((_event, session) => {
       void hydrateSession(session)
     })
 

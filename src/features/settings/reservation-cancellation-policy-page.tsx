@@ -1,3 +1,4 @@
+import { FormSubmitButton } from "@/components/shared/form-submit-button";
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck } from "lucide-react";
@@ -75,14 +76,14 @@ export function ReservationCancellationPolicyPage() {
             <textarea name="notes" rows={4} defaultValue={policy.data.cancellation_policy_notes ?? ""} placeholder="State how guests are informed, any exceptions, and who can approve a waiver." className="mt-2 w-full rounded-xl border border-stone-300 px-3 py-2.5" />
           </label>
           <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-950">
-            A zero-night fee means no fee is specified. These values are policy records only: they do not charge a guest, forfeit a deposit, create a receivable, or issue a refund. Any financial action must use its separately authorized workflow. Confirm the wording with the hotel owner and accountant before using it in guest confirmations.
+            A zero-night fee means no fee is specified. These values are policy records only: they do not charge a guest, forfeit a deposit, create a receivable, or issue a refund. Any financial action must use its separately authorized workflow. Confirm the wording with hotel leadership and the accountant before using it in guest confirmations.
           </p>
           <label className="mt-4 flex items-start gap-3 rounded-xl border border-stone-200 p-3 text-sm leading-5 text-stone-700">
             <input required type="checkbox" name="confirmPolicy" defaultChecked={false} className="mt-1 size-4 accent-amber-900" />
-            <span>I confirm the hotel Owner/GM has approved these exact guest-facing cancellation and no-show terms and that they will be disclosed before the guest confirms the reservation.</span>
+            <span>I confirm hotel management has approved these exact guest-facing cancellation and no-show terms and that they will be disclosed before the guest confirms the reservation.</span>
           </label>
         </div>
-        <div className="flex justify-end"><button disabled={busy} className="rounded-xl bg-amber-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{busy ? "Saving policy…" : "Save cancellation policy"}</button></div>
+        <div className="flex justify-end"><FormSubmitButton disabled={busy} className="rounded-xl bg-amber-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{busy ? "Saving policy…" : "Save cancellation policy"}</FormSubmitButton></div>
       </form>
     </section>
   );

@@ -1,3 +1,4 @@
+import { FormSubmitButton } from "@/components/shared/form-submit-button";
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock3, ShieldCheck } from "lucide-react";
@@ -96,14 +97,14 @@ export function StayPolicyPage() {
             <h2 className="font-semibold">Exception handling</h2>
           </div>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <PolicySelect name="earlyCheckIn" label="Early check-in" defaultValue={policy.data.early_check_in_policy} options={[['disabled','Do not allow'],['manager_override','Require Owner/GM approval'],['allow_no_charge','Allow without an automatic fee']]} />
-            <PolicySelect name="lateCheckout" label="Late checkout" defaultValue={policy.data.late_checkout_policy} options={[['disabled','Do not allow'],['manager_override','Require Owner/GM approval'],['allow_no_charge','Allow without an automatic fee']]} />
-            <PolicySelect name="earlyDeparture" label="Early departure" defaultValue={policy.data.early_departure_policy} options={[['manager_review','Require Owner/GM review'],['allow_no_penalty','Allow without an automatic penalty']]} />
+            <PolicySelect name="earlyCheckIn" label="Early check-in" defaultValue={policy.data.early_check_in_policy} options={[['disabled','Do not allow'],['manager_override','Require GM approval'],['allow_no_charge','Allow without an automatic fee']]} />
+            <PolicySelect name="lateCheckout" label="Late checkout" defaultValue={policy.data.late_checkout_policy} options={[['disabled','Do not allow'],['manager_override','Require GM approval'],['allow_no_charge','Allow without an automatic fee']]} />
+            <PolicySelect name="earlyDeparture" label="Early departure" defaultValue={policy.data.early_departure_policy} options={[['manager_review','Require GM review'],['allow_no_penalty','Allow without an automatic penalty']]} />
             <PolicySelect name="extraNight" label="Extra-night pricing" defaultValue={policy.data.extra_night_policy} options={[['standard_stay_rate','Continue the current stay rate'],['manager_rate_approval','Require management rate approval']]} />
           </div>
           <label className="mt-4 block text-sm font-medium text-stone-700">
             Internal policy notes
-            <textarea name="notes" rows={4} defaultValue={policy.data.stay_policy_notes ?? ""} placeholder="Record the hotel owner's agreed operational instructions." className="mt-2 w-full rounded-xl border border-stone-300 px-3 py-2.5" />
+            <textarea name="notes" rows={4} defaultValue={policy.data.stay_policy_notes ?? ""} placeholder="Record the hotel's approved operational instructions." className="mt-2 w-full rounded-xl border border-stone-300 px-3 py-2.5" />
           </label>
           <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">
             Monetary penalties, waived nights, and late-checkout fees remain disabled until management and the accountant approve exact charging rules.
@@ -111,9 +112,9 @@ export function StayPolicyPage() {
         </div>
 
         <div className="flex justify-end">
-          <button disabled={busy} className="rounded-xl bg-amber-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60">
+          <FormSubmitButton disabled={busy} className="rounded-xl bg-amber-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60">
             {busy ? "Saving policy…" : "Save stay policy"}
-          </button>
+          </FormSubmitButton>
         </div>
       </form>
     </section>

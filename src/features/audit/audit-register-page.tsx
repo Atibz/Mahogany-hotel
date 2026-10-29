@@ -1,3 +1,4 @@
+import { FormSubmitButton } from "@/components/shared/form-submit-button";
 import { useMemo, useState, type FormEvent } from "react";
 import {
   ChevronLeft,
@@ -17,8 +18,14 @@ import {
   useActiveHotel,
   useActivityRegister,
 } from "@/features/reception/use-reception";
-import type { ActivityRegisterFilters } from "@/features/reception/reception-service";
+import {
+  searchActivityRegister,
+  type ActivityRegisterFilters,
+  type ActivityRegisterItem,
+} from "@/features/reception/reception-service";
 import { buildAuditCsv } from "./audit-csv";
+import { loadMatchingAuditRows } from "./audit-export";
+import { auditPaginationLabel } from "./audit-pagination";
 
 const PAGE_SIZE = 50;
 
@@ -38,13 +45,13 @@ function sentence(value: string) {
   return value.replaceAll(".", " · ").replaceAll("_", " ");
 }
 
-function downloadRows(rows: ReturnType<typeof useActivityRegister>["data"]) {
+function downloadRows(rows: ActivityRegisterItem[], scope: "page" | "matching") {
   if (!rows?.length) return false;
   const content = buildAuditCsv(rows);
   const url = URL.createObjectURL(
     new Blob([`\uFEFF${content}`], { type: "text/csv;charset=utf-8" }),
   );
-  const fileName = `audit-register-${dateValue(new Date())}.csv`;
+  const fileName = `audit-register-${scope}-${dateValue(new Date())}.csv`;
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = fileName;
@@ -85,6 +92,8 @@ export function AuditRegisterPage() {
   });
   const [validationMessage, setValidationMessage] = useState("");
   const [exportMessage, setExportMessage] = useState("");
+  const [exportError, setExportError] = useState(false);
+  const [exportingAll, setExportingAll] = useState(false);
   const [exportLink, setExportLink] = useState<{
     url: string;
     fileName: string;
@@ -98,9 +107,46 @@ export function AuditRegisterPage() {
   const actionOptions = [...new Set(rows.map((row) => row.action))].sort();
   const entityOptions = [...new Set(rows.map((row) => row.entity_type))].sort();
 
+  function offerExport(result: { url: string; fileName: string }, message: string) {
+    if (exportLink) URL.revokeObjectURL(exportLink.url);
+    setExportLink(result);
+    setExportError(false);
+    setExportMessage(message);
+    window.setTimeout(() => {
+      URL.revokeObjectURL(result.url);
+      setExportLink((current) => current?.url === result.url ? null : current);
+    }, 30_000);
+  }
+
+  async function exportMatching() {
+    if (!hotel.data || exportingAll) return;
+    const hotelId = hotel.data.id;
+    const appliedFilters = { ...filters };
+    setExportingAll(true);
+    setExportError(false);
+    setExportMessage("Preparing all matching audit records…");
+    try {
+      const matchingRows = await loadMatchingAuditRows(
+        appliedFilters,
+        (pageFilters) => searchActivityRegister(hotelId, pageFilters),
+        (loaded, count) => setExportMessage(`Preparing ${loaded} of ${count} matching records…`),
+      );
+      const result = downloadRows(matchingRows, "matching");
+      if (result) offerExport(result, `${matchingRows.length} matching audit records prepared as CSV.`);
+      else setExportMessage("No audit records match these filters.");
+    } catch (error) {
+      setExportError(true);
+      setExportMessage(error instanceof Error ? error.message : "Unable to export audit records.");
+    } finally {
+      setExportingAll(false);
+    }
+  }
+
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setExportMessage("");
+    setExportLink(null);
+    setExportError(false);
     const minAmount = draft.minAmount.trim()
       ? Number(draft.minAmount.replaceAll(",", ""))
       : undefined;
@@ -155,6 +201,8 @@ export function AuditRegisterPage() {
     setFilters({ ...dates, limit: PAGE_SIZE, offset: 0 });
     setValidationMessage("");
     setExportMessage("");
+    setExportLink(null);
+    setExportError(false);
   }
 
   if (hotel.isLoading) return <PageLoading />;
@@ -177,31 +225,31 @@ export function AuditRegisterPage() {
             recorded with it. Audit records are read-only.
           </p>
         </div>
-        <button
-          type="button"
-          disabled={!rows.length}
-          onClick={() => {
-            const result = downloadRows(activity.data);
-            if (!result) return;
-            if (exportLink) URL.revokeObjectURL(exportLink.url);
-            setExportLink(result);
-            setExportMessage(
-              `${rows.length} visible audit record${rows.length === 1 ? "" : "s"} prepared as CSV.`,
-            );
-            window.setTimeout(() => {
-              URL.revokeObjectURL(result.url);
-              setExportLink((current) =>
-                current?.url === result.url ? null : current,
-              );
-            }, 30_000);
-          }}
-          className="inline-flex items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold hover:bg-stone-50 disabled:opacity-50"
-        >
-          <Download className="size-4" /> Export visible rows
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={!rows.length || activity.isFetching || exportingAll}
+            onClick={() => {
+              const result = downloadRows(rows, "page");
+              if (!result) return;
+              offerExport(result, `${rows.length} visible audit record${rows.length === 1 ? "" : "s"} prepared as CSV.`);
+            }}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold hover:bg-stone-50 disabled:opacity-50"
+          >
+            <Download className="size-4" /> Export visible rows
+          </button>
+          <button
+            type="button"
+            disabled={!rows.length || activity.isFetching || exportingAll}
+            onClick={() => void exportMatching()}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-950 disabled:opacity-50"
+          >
+            <Download className="size-4" /> {exportingAll ? "Preparing export…" : `Export all matching (${total})`}
+          </button>
+        </div>
       </div>
       {exportMessage && (
-        <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-emerald-700" role="status">
+        <div className={`mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium ${exportError ? "text-red-700" : "text-emerald-700"}`} role={exportError ? "alert" : "status"}>
           <span>{exportMessage}</span>
           {exportLink && (
             <a
@@ -214,6 +262,7 @@ export function AuditRegisterPage() {
           )}
         </div>
       )}
+      <p className="mt-2 text-xs text-stone-500">CSV is raw data. In WPS or Excel, widen the Details column or enable Wrap Text to read the recorded JSON evidence.</p>
 
       <form
         onSubmit={applyFilters}
@@ -333,12 +382,12 @@ export function AuditRegisterPage() {
           </p>
         )}
         <div className="mt-4 flex flex-wrap gap-2">
-          <button
+          <FormSubmitButton
             type="submit"
             className="rounded-xl bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-950"
           >
             Apply filters
-          </button>
+          </FormSubmitButton>
           <button
             type="button"
             onClick={resetFilters}
@@ -429,7 +478,7 @@ export function AuditRegisterPage() {
         )}
         <div className="flex items-center justify-between border-t border-stone-200 px-4 py-3">
           <p className="text-sm text-stone-600">
-            Page {page} of {pageCount}
+            {auditPaginationLabel(page, pageCount, activity.isFetching, Boolean(activity.error))}
           </p>
           <div className="flex gap-2">
             <button

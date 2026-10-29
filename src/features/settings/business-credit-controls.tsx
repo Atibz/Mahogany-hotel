@@ -1,3 +1,4 @@
+import { FormSubmitButton } from "@/components/shared/form-submit-button";
 import { useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -118,7 +119,7 @@ export function BusinessCreditControls({ hotelId, hotelName, roleCodes, receivab
         });
       if (result.error) throw result.error;
       setAction(null);
-      setMessage("Request submitted. An independent GM or Owner must approve and execute it in Payments & receipts.");
+      setMessage("Request submitted. An independent GM must approve and execute it in Payments & receipts.");
       await queryClient.invalidateQueries({ queryKey: ["finance-approval-requests", hotelId] });
       await onChange();
     } catch (error) {
@@ -152,12 +153,12 @@ export function BusinessCreditControls({ hotelId, hotelName, roleCodes, receivab
 
       <Modal open={Boolean(action)} title={action === "credit" ? "Request company credit note" : "Request company refund"} onClose={() => !busy && setAction(null)}>
         {action && <form onSubmit={submitRequest} className="space-y-4 text-sm">
-          <p className="rounded-xl bg-stone-50 p-3 text-stone-600">An independent GM or Owner must approve and execute this request. The original invoice and payment remain in the audit trail.</p>
+          <p className="rounded-xl bg-stone-50 p-3 text-stone-600">An independent GM must approve and execute this request. The original invoice and payment remain in the audit trail.</p>
           {action === "credit" ? <label className="block font-medium">Closed company invoice<select name="receivable" required className="mt-2 w-full rounded-xl border px-3 py-2.5"><option value="">Select invoice</option>{eligibleReceivables.map((item) => <option key={item.receivable_id} value={item.receivable_id}>{item.account_name} · {item.invoice_number} · {item.receivable_number}</option>)}</select></label> : <><p className="font-semibold">{selectedPosition?.account_name} · Available credit {formatNaira(selectedPosition?.credit_kobo ?? 0)}</p><label className="block font-medium">Original company payment<select name="payment" required className="mt-2 w-full rounded-xl border px-3 py-2.5"><option value="">Select payment</option>{eligiblePayments.map((item) => <option key={item.payment_id} value={item.payment_id}>{item.payment_number} · {item.payment_method_name} · {formatNaira(item.amount_kobo)}</option>)}</select></label><label className="block font-medium">Payout reference (required for non-cash)<input name="reference" className="mt-2 w-full rounded-xl border px-3 py-2.5" /></label></>}
           <label className="block font-medium">Amount (naira)<input name="amount" type="number" min="0.01" step="0.01" max={action === "refund" ? ((selectedPosition?.credit_kobo ?? 0) / 100).toFixed(2) : undefined} required className="mt-2 w-full rounded-xl border px-3 py-2.5" /></label>
           <label className="block font-medium">Reason<textarea name="reason" rows={3} required className="mt-2 w-full rounded-xl border px-3 py-2.5" /></label>
           {message && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{message}</p>}
-          <div className="flex justify-end gap-2"><button type="button" onClick={() => setAction(null)} disabled={busy} className="rounded-xl border px-4 py-2.5 font-semibold">Cancel</button><button disabled={busy} className="rounded-xl bg-amber-900 px-4 py-2.5 font-semibold text-white disabled:opacity-50">{busy ? "Submitting…" : "Submit for approval"}</button></div>
+          <div className="flex justify-end gap-2"><button type="button" onClick={() => setAction(null)} disabled={busy} className="rounded-xl border px-4 py-2.5 font-semibold">Cancel</button><FormSubmitButton disabled={busy} className="rounded-xl bg-amber-900 px-4 py-2.5 font-semibold text-white disabled:opacity-50">{busy ? "Submitting…" : "Submit for approval"}</FormSubmitButton></div>
         </form>}
       </Modal>
       <Modal open={Boolean(note)} title={note?.credit_note_number ?? "Credit note"} onClose={() => setNote(null)}>

@@ -1,3 +1,4 @@
+import { FormSubmitButton } from "@/components/shared/form-submit-button";
 import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { GitMerge, Plus, Search, Users, X } from "lucide-react";
@@ -252,12 +253,12 @@ export function GuestsPage() {
             placeholder="Email"
             className="rounded-lg border border-stone-300 px-3 py-2.5"
           />
-          <button
+          <FormSubmitButton
             disabled={isSaving}
             className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
           >
             {isSaving ? "Saving…" : "Add guest"}
-          </button>
+          </FormSubmitButton>
           {message && (
             <p className="sm:col-span-4 text-sm text-stone-600" role="status">
               {message}
@@ -294,12 +295,12 @@ export function GuestsPage() {
             className="rounded-lg border border-stone-300 px-3 py-2.5"
           />
           <div className="flex gap-2">
-            <button
+            <FormSubmitButton
               disabled={isSaving}
               className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
             >
               Save
-            </button>
+            </FormSubmitButton>
             <button
               type="button"
               onClick={() => setEditingGuest(null)}
@@ -400,13 +401,13 @@ export function GuestsPage() {
             >
               Cancel
             </button>
-            <button
+            <FormSubmitButton
               type="submit"
               disabled={isSaving || !reason.trim()}
               className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
             >
               {isSaving ? "Saving…" : "Continue"}
-            </button>
+            </FormSubmitButton>
           </div>
         </form>
       </Modal>
@@ -469,13 +470,13 @@ export function GuestsPage() {
             >
               Cancel
             </button>
-            <button
+            <FormSubmitButton
               type="submit"
-              disabled={isSaving}
+              disabled={isSaving || mergeSourceId === mergeSurvivorId}
               className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
             >
               {isSaving ? "Merging…" : "Merge records"}
-            </button>
+            </FormSubmitButton>
           </div>
         </form>
       </Modal>

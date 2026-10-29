@@ -1,6 +1,11 @@
+import { Navigate } from 'react-router-dom'
 import { Settings2 } from 'lucide-react'
 
+import { isSupabaseConfigured } from '@/lib/supabase/client'
+
 export function SetupPage() {
+  if (isSupabaseConfigured) return <Navigate to="/sign-in" replace />
+
   return (
     <main className="grid min-h-screen place-items-center bg-stone-100 p-5">
       <section className="w-full max-w-xl rounded-2xl bg-white p-8 shadow-sm ring-1 ring-stone-200">
@@ -9,7 +14,9 @@ export function SetupPage() {
         <p className="mt-3 leading-7 text-stone-600">
           Add <code className="rounded bg-stone-100 px-1.5 py-0.5 text-sm">VITE_SUPABASE_URL</code> and{' '}
           <code className="rounded bg-stone-100 px-1.5 py-0.5 text-sm">VITE_SUPABASE_PUBLISHABLE_KEY</code> to a local{' '}
-          <code className="rounded bg-stone-100 px-1.5 py-0.5 text-sm">.env</code> file. Only the public publishable key belongs in the browser.
+          <code className="rounded bg-stone-100 px-1.5 py-0.5 text-sm">.env</code> or{' '}
+          <code className="rounded bg-stone-100 px-1.5 py-0.5 text-sm">.env.local</code> file, then restart the dev server.
+          Only the public publishable key belongs in the browser.
         </p>
       </section>
     </main>

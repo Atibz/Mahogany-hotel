@@ -9,13 +9,13 @@ function csvCell(value: unknown) {
 export function buildAuditCsv(rows: ActivityRegisterItem[]) {
   return [
     [
-      "Occurred at",
+      "Occurred at (UTC)",
       "User",
       "Action",
       "Entity",
       "Entity ID",
-      "Amount",
-      "Details",
+      "Amount (NGN)",
+      "Details (JSON)",
     ],
     ...rows.map((row) => [
       row.occurred_at,

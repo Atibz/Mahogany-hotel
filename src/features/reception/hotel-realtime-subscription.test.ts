@@ -23,7 +23,11 @@ function createRealtimeHarness() {
     channel: vi.fn(() => channel),
     removeChannel: vi.fn(async () => "ok"),
   };
-  const invalidateQueries = vi.fn(async () => undefined);
+  const invalidateQueries = vi.fn(async (filters: {
+    predicate: (query: { queryKey: unknown[] }) => boolean;
+  }) => {
+    void filters;
+  });
 
   return {
     listeners,
@@ -75,9 +79,7 @@ describe("hotel realtime subscription", () => {
     vi.advanceTimersByTime(1);
 
     expect(harness.invalidateQueries).toHaveBeenCalledOnce();
-    const filters = harness.invalidateQueries.mock.calls[0][0] as {
-      predicate: (query: { queryKey: unknown[] }) => boolean;
-    };
+    const filters = harness.invalidateQueries.mock.calls[0][0];
     expect(filters.predicate({ queryKey: ["stays", "hotel-123"] })).toBe(true);
     expect(filters.predicate({ queryKey: ["stays", "hotel-456"] })).toBe(false);
   });

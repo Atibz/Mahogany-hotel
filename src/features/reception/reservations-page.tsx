@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from "react";
+import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useEffect, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
-import { CalendarRange, List, Mail, Plus, X } from "lucide-react";
+import { CalendarRange, List, Plus, X } from "lucide-react";
 
 import { Modal } from "@/components/shared/modal";
 import {
@@ -37,6 +38,10 @@ import {
   useRoomTypes,
 } from "./use-reception";
 import { ReservationRack } from "./reservation-rack";
+import { ReservationActions, type ReservationAction } from "./reservation-actions";
+import { ReservationDetailsModal } from "./reservation-details-modal";
+import { formatNoShowAllowedAfter, noShowAllowedAfter } from "./no-show-eligibility";
+import { reservationMatchesSearch } from "./reservation-search";
 import { guestCountError } from "./reservation-validation";
 
 function ReservationPolicyNotice({ reservation, kind }: { reservation: Reservation | null; kind: "cancellation" | "no-show" }) {
@@ -88,12 +93,15 @@ export function ReservationsPage() {
   const [amendmentCheckOut, setAmendmentCheckOut] = useState("");
   const [noShowTarget, setNoShowTarget] = useState<Reservation | null>(null);
   const [noShowReason, setNoShowReason] = useState("");
+  const [noShowError, setNoShowError] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [depositReservationId, setDepositReservationId] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
   const [depositMethodId, setDepositMethodId] = useState("");
   const [depositReference, setDepositReference] = useState("");
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"rack" | "list">("rack");
+  const [selectedReservationId, setSelectedReservationId] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [billingTarget, setBillingTarget] = useState<Reservation | null>(null);
   const [businessAccountId, setBusinessAccountId] = useState("");
@@ -139,6 +147,43 @@ export function ReservationsPage() {
   );
   const canAuthorizeCredit = roleCodes.some((role) => ["owner", "general_manager"].includes(role));
   const canManageReservations = roleCodes.some((role) => ["owner", "general_manager", "receptionist"].includes(role));
+  const noShowCutoff = noShowTarget ? noShowAllowedAfter(noShowTarget, cancellationPolicy.data) : null;
+  const noShowHasCutoffData = Boolean(
+    cancellationPolicy.data || (
+      noShowTarget?.reservation_cancellation_policy_snapshots?.scheduled_check_in_time &&
+      noShowTarget.reservation_cancellation_policy_snapshots.no_show_grace_hours != null
+    ),
+  );
+  const noShowEligible = noShowHasCutoffData && noShowCutoff !== null && nowMs >= noShowCutoff.getTime();
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  function openReservationAction(reservation: Reservation, action: ReservationAction) {
+    if (action === "email") {
+      void handleSendArrivalEmail(reservation);
+    } else if (action === "billing") {
+      const current = businessAuthorizations.data?.find((item) => item.reservation_id === reservation.id);
+      setBillingTarget(reservation);
+      setBusinessAccountId(current?.business_account_id ?? "");
+      setBillingMode(current?.billing_mode ?? "reference");
+      setAuthorizedCredit(current?.authorized_amount_kobo ? String(current.authorized_amount_kobo / 100) : "");
+      setBillingReason("");
+    } else if (action === "amend") {
+      setAmendmentTarget(reservation);
+      setAmendmentRoomTypeId(reservation.room_type_id);
+      setAmendmentCheckIn(reservation.check_in_date);
+      setAmendmentCheckOut(reservation.check_out_date);
+    } else if (action === "cancel") {
+      setCancellationTarget(reservation);
+    } else {
+      setNoShowTarget(reservation);
+      setNoShowReason("");
+      setNoShowError(null);
+    }
+  }
 
   async function handleSendArrivalEmail(reservation: Reservation) {
     setEmailingReservationId(reservation.id);
@@ -240,7 +285,7 @@ export function ReservationsPage() {
       });
       setMessage(
         requiresApproval
-          ? "Reservation created at the standard rate. The exceptional discount is awaiting independent GM or Owner approval before check-in."
+          ? "Reservation created at the standard rate. The exceptional discount is awaiting independent GM approval before check-in."
           : "Reservation created and the agreed rate was saved as a snapshot.",
       );
     } catch (error) {
@@ -311,17 +356,25 @@ export function ReservationsPage() {
   async function handleNoShow(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!noShowTarget || !noShowReason.trim()) return;
+    if (!noShowEligible) {
+      setNoShowError(noShowCutoff && noShowHasCutoffData
+        ? `No-show can be recorded from ${formatNoShowAllowedAfter(noShowCutoff)} (hotel time).`
+        : "The no-show cutoff is still loading. Please try again shortly.");
+      return;
+    }
     setIsSaving(true);
+    setNoShowError(null);
     try {
       await markReservationNoShow(noShowTarget.id, noShowReason);
       setNoShowTarget(null);
       setNoShowReason("");
+      setNoShowError(null);
       await queryClient.invalidateQueries({
         queryKey: ["reservations", hotel.data?.id],
       });
       setMessage("Reservation marked as no-show and retained in history.");
     } catch (error) {
-      setMessage(
+      setNoShowError(
         error instanceof Error
           ? error.message
           : "Reservation could not be marked no-show.",
@@ -396,11 +449,8 @@ export function ReservationsPage() {
         Create guests and room types before creating reservations.
       </EmptyState>
     );
-  const visibleReservations = reservations.data?.filter((reservation) =>
-    `${reservation.reservation_number} ${reservation.guests?.full_name ?? ""} ${reservation.rooms?.room_number ?? ""}`
-      .toLowerCase()
-      .includes(search.toLowerCase()),
-  );
+  const visibleReservations = reservations.data?.filter((reservation) => reservationMatchesSearch(reservation, search));
+  const selectedReservation = reservations.data?.find((reservation) => reservation.id === selectedReservationId) ?? null;
 
   return (
     <section>
@@ -453,7 +503,7 @@ export function ReservationsPage() {
           className="mt-7 grid gap-3 rounded-xl border border-stone-200 bg-white p-5 md:grid-cols-3"
         >
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-950 md:col-span-3">
-            {cancellationPolicy.data?.cancellation_policy_confirmed ? <>Confirmed cancellation terms for this new booking: free cancellation up to {cancellationPolicy.data.free_cancellation_hours} hours before arrival; late-cancellation policy records {cancellationPolicy.data.late_cancellation_charge_nights} night(s). No-show grace period: {cancellationPolicy.data.no_show_grace_hours} hours; recorded no-show policy: {cancellationPolicy.data.no_show_charge_nights} night(s). These terms are snapshotted with the reservation. No fee or refund is automatically applied.</> : <>Cancellation policy is not confirmed by Owner/GM. New reservations will be marked as terms-unconfirmed; do not promise or apply a cancellation/no-show fee. Set and confirm terms in Administration → Cancellation policy.</>}
+            {cancellationPolicy.data?.cancellation_policy_confirmed ? <>Confirmed cancellation terms for this new booking: free cancellation up to {cancellationPolicy.data.free_cancellation_hours} hours before arrival; late-cancellation policy records {cancellationPolicy.data.late_cancellation_charge_nights} night(s). No-show grace period: {cancellationPolicy.data.no_show_grace_hours} hours; recorded no-show policy: {cancellationPolicy.data.no_show_charge_nights} night(s). These terms are snapshotted with the reservation. No fee or refund is automatically applied.</> : <>Cancellation policy is not confirmed by the General Manager. New reservations will be marked as terms-unconfirmed; do not promise or apply a cancellation/no-show fee. Set and confirm terms in Administration → Cancellation policy.</>}
           </div>
           <select
             required
@@ -617,7 +667,7 @@ export function ReservationsPage() {
             </span>
             <br />
             <span className="text-[11px] leading-4">
-              Discounts above 20% require GM or Owner approval before check-in.
+              Discounts above 20% require GM approval before check-in.
             </span>
           </p>
           {discountPercentage > 20 && (
@@ -629,7 +679,7 @@ export function ReservationsPage() {
               className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 md:col-span-2"
             />
           )}
-          <button
+          <FormSubmitButton
             disabled={
               isSaving ||
               availableRooms.isFetching ||
@@ -639,7 +689,7 @@ export function ReservationsPage() {
             className="w-fit justify-self-start rounded-lg bg-amber-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
           >
             {isSaving ? "Saving…" : "Create reservation"}
-          </button>
+          </FormSubmitButton>
           {!availabilityReady && (
             <p className="md:col-span-3 text-sm text-stone-500">
               Choose a room type and valid check-in/check-out dates to search
@@ -674,21 +724,32 @@ export function ReservationsPage() {
           {message}
         </p>
       )}
+      <label className="mt-7 block text-sm font-medium text-stone-700" htmlFor="reservation-search">
+        Search reservations
+      </label>
+      <input
+        id="reservation-search"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="Search reference, guest, or room"
+        className="mt-2 w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5"
+      />
       {view === "rack" && (
-        <div className="mt-7">
+        <div className="mt-3">
           <ReservationRack
             rooms={rooms.data ?? []}
             reservations={reservations.data ?? []}
+            businessAuthorizations={businessAuthorizations.data ?? []}
+            canManageReservations={canManageReservations}
+            emailingReservationId={emailingReservationId}
+            cancellationPolicy={cancellationPolicy.data}
+            nowMs={nowMs}
+            searchTerm={search}
+            onAction={openReservationAction}
           />
         </div>
       )}
       <div className={view === "list" ? "" : "hidden"}>
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search reference, guest, or room"
-          className="mt-7 w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5"
-        />
         <div className="mt-3 overflow-x-auto rounded-xl border border-stone-200 bg-white">
           <table className="w-full min-w-200 text-left text-sm">
             <thead className="bg-stone-50 text-stone-500">
@@ -715,74 +776,33 @@ export function ReservationsPage() {
                   <td className="px-5 py-3">{reservation.guests?.full_name}</td>
                   <td className="px-5 py-3">
                     {reservation.rooms?.room_number || "Unassigned"}
+                    <span className="mt-1 block text-xs text-stone-500">{reservation.room_types?.name ?? "Room type unavailable"}</span>
                   </td>
                   <td className="px-5 py-3">
                     {reservation.check_in_date} → {reservation.check_out_date}
+                    <span className="mt-1 block text-xs text-stone-500">{formatNaira(reservation.agreed_rate_kobo)} / night</span>
                   </td>
                   <td className="px-5 py-3 capitalize">
                     {reservation.status.replace("_", " ")}
                   </td>
-                  <td className="flex flex-wrap gap-2 px-5 py-3">
-                    {canManageReservations && ["pending", "confirmed"].includes(reservation.status) && (
+                  <td className="px-5 py-3">
+                    <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => void handleSendArrivalEmail(reservation)}
-                        disabled={emailingReservationId === reservation.id || !reservation.guests?.email}
-                        title={!reservation.guests?.email ? "Add an email address to the guest profile first" : "Send the guest their arrival details"}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-900 disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={() => setSelectedReservationId(reservation.id)}
+                        className="rounded-lg border border-stone-300 px-3 py-2 text-xs font-semibold text-stone-800"
                       >
-                        <Mail className="size-3.5" />
-                        {!reservation.guests?.email
-                          ? "No guest email"
-                          : emailingReservationId === reservation.id
-                            ? "Sending…"
-                            : "Email arrival details"}
+                        View details
                       </button>
-                    )}
-                    {["pending", "confirmed"].includes(reservation.status) && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const current = businessAuthorizations.data?.find((item) => item.reservation_id === reservation.id);
-                            setBillingTarget(reservation);
-                            setBusinessAccountId(current?.business_account_id ?? "");
-                            setBillingMode(current?.billing_mode ?? "reference");
-                            setAuthorizedCredit(current?.authorized_amount_kobo ? String(current.authorized_amount_kobo / 100) : "");
-                            setBillingReason("");
-                          }}
-                          className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-900"
-                        >
-                          Business billing
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAmendmentTarget(reservation);
-                            setAmendmentRoomTypeId(reservation.room_type_id);
-                            setAmendmentCheckIn(reservation.check_in_date);
-                            setAmendmentCheckOut(reservation.check_out_date);
-                          }}
-                          className="rounded-lg border border-stone-300 px-3 py-2 text-xs font-semibold"
-                        >
-                          Amend
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCancellationTarget(reservation)}
-                          className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setNoShowTarget(reservation)}
-                          className="rounded-lg border border-stone-300 px-3 py-2 text-xs font-semibold"
-                        >
-                          No-show
-                        </button>
-                      </>
-                    )}
+                      <ReservationActions
+                        reservation={reservation}
+                        canManageReservations={canManageReservations}
+                        emailingReservationId={emailingReservationId}
+                        cancellationPolicy={cancellationPolicy.data}
+                        nowMs={nowMs}
+                        onAction={(action) => openReservationAction(reservation, action)}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -790,6 +810,19 @@ export function ReservationsPage() {
           </table>
         </div>
       </div>
+      <ReservationDetailsModal
+        reservation={selectedReservation}
+        businessAuthorization={businessAuthorizations.data?.find((item) => item.reservation_id === selectedReservation?.id)}
+        canManageReservations={canManageReservations}
+        emailingReservationId={emailingReservationId}
+        cancellationPolicy={cancellationPolicy.data}
+        nowMs={nowMs}
+        onClose={() => setSelectedReservationId(null)}
+        onAction={(reservation, action) => {
+          setSelectedReservationId(null);
+          openReservationAction(reservation, action);
+        }}
+      />
       <Modal open={Boolean(billingTarget)} title="Business billing" onClose={() => setBillingTarget(null)}>
         {billingTarget && <form onSubmit={handleBusinessBilling} className="grid gap-4">
           <p className="text-sm text-stone-600">{billingTarget.reservation_number} · {billingTarget.guests?.full_name}</p>
@@ -798,7 +831,7 @@ export function ReservationsPage() {
           {billingMode === "direct_bill" && <label className="text-sm font-medium">Credit to reserve (naira)<input required type="number" min="0.01" step="0.01" value={authorizedCredit} onChange={(event) => setAuthorizedCredit(event.target.value)} className="mt-2 w-full rounded-xl border px-3 py-2.5" /></label>}
           <label className="text-sm font-medium">Reason and authority<textarea required rows={3} value={billingReason} onChange={(event) => setBillingReason(event.target.value)} placeholder="Record the company instruction, approver, or supporting reference" className="mt-2 w-full rounded-xl border px-3 py-2.5" /></label>
           <p className="rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">This reserves credit only. It does not settle the guest folio or issue a company invoice.</p>
-          <div className="flex justify-end gap-2"><button type="button" onClick={() => setBillingTarget(null)} className="rounded-xl border px-4 py-2.5 text-sm font-semibold">Cancel</button><button disabled={isSaving || !businessAccounts.data?.length} className="rounded-xl bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{isSaving ? "Saving…" : "Save business billing"}</button></div>
+          <div className="flex justify-end gap-2"><button type="button" onClick={() => setBillingTarget(null)} className="rounded-xl border px-4 py-2.5 text-sm font-semibold">Cancel</button><FormSubmitButton disabled={isSaving || !businessAccounts.data?.length} className="rounded-xl bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{isSaving ? "Saving…" : "Save business billing"}</FormSubmitButton></div>
         </form>}
       </Modal>
       <Modal
@@ -827,12 +860,12 @@ export function ReservationsPage() {
             >
               Keep reservation
             </button>
-            <button
+            <FormSubmitButton
               disabled={isSaving}
               className="rounded-lg bg-red-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
             >
               Cancel reservation
-            </button>
+            </FormSubmitButton>
           </div>
         </form>
       </Modal>
@@ -919,7 +952,7 @@ export function ReservationsPage() {
               placeholder="Reason for amendment"
               className="rounded-lg border border-stone-300 px-3 py-2.5"
             />
-            <button
+            <FormSubmitButton
               disabled={
                 isSaving ||
                 (!amendmentRooms.data?.length && !amendmentTarget.room_id)
@@ -927,17 +960,25 @@ export function ReservationsPage() {
               className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
             >
               Save amendment
-            </button>
+            </FormSubmitButton>
           </form>
         )}
       </Modal>
       <Modal
         open={Boolean(noShowTarget)}
         title="Mark reservation as no-show"
-        onClose={() => setNoShowTarget(null)}
+        onClose={() => { setNoShowTarget(null); setNoShowError(null); }}
       >
         <form onSubmit={handleNoShow}>
           <ReservationPolicyNotice reservation={noShowTarget} kind="no-show" />
+          {!noShowEligible && (
+            <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+              {noShowCutoff && noShowHasCutoffData
+                ? `No-show becomes available ${formatNoShowAllowedAfter(noShowCutoff)} (hotel time).`
+                : "Checking the saved no-show cutoff…"}
+            </p>
+          )}
+          {noShowError && <p role="alert" className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{noShowError}</p>}
           <textarea
             required
             value={noShowReason}
@@ -949,17 +990,17 @@ export function ReservationsPage() {
           <div className="mt-4 flex justify-end gap-2">
             <button
               type="button"
-              onClick={() => setNoShowTarget(null)}
+              onClick={() => { setNoShowTarget(null); setNoShowError(null); }}
               className="rounded-lg border border-stone-300 px-4 py-2.5 text-sm font-semibold"
             >
               Keep reservation
             </button>
-            <button
-              disabled={isSaving}
+            <FormSubmitButton
+              disabled={isSaving || !noShowEligible}
               className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
             >
               Mark no-show
-            </button>
+            </FormSubmitButton>
           </div>
         </form>
       </Modal>
@@ -1025,7 +1066,7 @@ export function ReservationsPage() {
             placeholder="Reference"
             className="rounded-lg border border-amber-200 bg-white px-3 py-2.5"
           />
-          <button
+          <FormSubmitButton
             disabled={
               isSaving ||
               !depositReservationId ||
@@ -1035,7 +1076,7 @@ export function ReservationsPage() {
             className="w-fit rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
           >
             {isSaving ? "Recording…" : "Record deposit"}
-          </button>
+          </FormSubmitButton>
         </form>
       )}
       {canReceiveDeposit && depositReservationId && (

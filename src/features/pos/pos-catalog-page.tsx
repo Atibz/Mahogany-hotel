@@ -1,3 +1,4 @@
+import { FormSubmitButton } from "@/components/shared/form-submit-button";
 import { useState, type FormEvent, type LabelHTMLAttributes, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layers3, Plus, Utensils, WalletCards } from "lucide-react";
@@ -54,7 +55,7 @@ async function loadCatalog(hotelId: string): Promise<CatalogData> {
 function FormCard({ title, children, onSubmit, busy, submitLabel = "Save" }: { title: string; children: ReactNode; onSubmit: (event: FormEvent<HTMLFormElement>) => void; busy: boolean; submitLabel?: string }) {
   return <form onSubmit={onSubmit} className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4">
     <h3 className="font-semibold text-stone-900">{title}</h3>{children}
-    <button className={buttonClass} disabled={busy}><Plus className="size-4" />{submitLabel}</button>
+    <FormSubmitButton className={buttonClass} disabled={busy}><Plus className="size-4" />{submitLabel}</FormSubmitButton>
   </form>;
 }
 
@@ -162,7 +163,7 @@ export function PosCatalogPage() {
   }
 
   if (hotel.isLoading || catalog.isLoading) return <PageLoading />;
-  if (hotel.error || catalog.error) return <PageError message="Unable to load the POS catalog. Confirm the Owner/GM catalog permission and that the catalog migration is installed." />;
+  if (hotel.error || catalog.error) return <PageError message="Unable to load the POS catalog. Confirm the GM catalog permission and that the catalog migration is installed." />;
   if (!hotel.data || !catalog.data) return <EmptyState>POS catalog is not available for this hotel.</EmptyState>;
 
   const outletOptions = activeOutlets.map((outlet) => <option key={outlet.id} value={outlet.id}>{outlet.name} ({outlet.outlet_type})</option>);
@@ -255,10 +256,10 @@ export function PosCatalogPage() {
           {editTarget.kind === "option" && <><Label>Option name<input className={fieldClass} name="name" defaultValue={editTarget.record.name} required maxLength={100} /></Label><div className="grid grid-cols-2 gap-2"><Label>Price adjustment (₦)<input className={fieldClass} name="delta" type="number" step="0.01" defaultValue={editTarget.record.price_delta_kobo / 100} required /></Label><Label>Display order<input className={fieldClass} name="order" type="number" min="0" max="32767" defaultValue={0} required /></Label></div></>}
         </>}
         <Label>Reason<input className={fieldClass} name="reason" required minLength={3} maxLength={500} placeholder="Why is this change needed?" /></Label>
-        <div className="flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => setEditTarget(null)} className="rounded-xl border border-stone-300 px-4 py-2.5 text-sm">Cancel</button><button className={buttonClass} disabled={busy}>{busy ? "Saving…" : editTarget.mode === "status" ? "Confirm status change" : "Save audited change"}</button></div>
+        <div className="flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => setEditTarget(null)} className="rounded-xl border border-stone-300 px-4 py-2.5 text-sm">Cancel</button><FormSubmitButton className={buttonClass} disabled={busy}>{busy ? "Saving…" : editTarget.mode === "status" ? "Confirm status change" : "Save audited change"}</FormSubmitButton></div>
       </form>
     </Modal>}
-    {unassignTarget && <Modal open title="Remove modifier group from item" onClose={() => { if (!busy) setUnassignTarget(null); }}><form onSubmit={submitUnassign} className="space-y-4"><p className="text-sm leading-5 text-stone-600">This removes the group from future selections on this menu item; it does not delete the group or its options.</p><Label>Reason<input className={fieldClass} name="reason" required minLength={3} maxLength={500} /></Label><div className="flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => setUnassignTarget(null)} className="rounded-xl border border-stone-300 px-4 py-2.5 text-sm">Cancel</button><button className={buttonClass} disabled={busy}>Remove and record</button></div></form></Modal>}
+    {unassignTarget && <Modal open title="Remove modifier group from item" onClose={() => { if (!busy) setUnassignTarget(null); }}><form onSubmit={submitUnassign} className="space-y-4"><p className="text-sm leading-5 text-stone-600">This removes the group from future selections on this menu item; it does not delete the group or its options.</p><Label>Reason<input className={fieldClass} name="reason" required minLength={3} maxLength={500} /></Label><div className="flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => setUnassignTarget(null)} className="rounded-xl border border-stone-300 px-4 py-2.5 text-sm">Cancel</button><FormSubmitButton className={buttonClass} disabled={busy}>Remove and record</FormSubmitButton></div></form></Modal>}
     <p className="text-xs leading-5 text-stone-500">Catalog edits and retirements require a reason and create audit evidence. Prices remain append-only. No sales, payments, guest-folio posting, or tax calculations happen here.</p>
   </section>;
 }

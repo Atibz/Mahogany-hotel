@@ -6,6 +6,11 @@ const cors = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// The deployed UI may be older or an invitation may be sent from localhost.
+// Never let a browser-supplied redirect determine where a staff invite lands.
+const staffInviteRedirectUrl =
+  "https://mahogany-hotel-2x6l.vercel.app/set-password?flow=invite";
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS")
     return new Response("ok", { headers: cors });
@@ -23,7 +28,7 @@ Deno.serve(async (request) => {
       { error: "Unauthorised" },
       { status: 401, headers: cors },
     );
-  const { email, fullName, hotelId, roleId, redirectTo } = await request.json();
+  const { email, fullName, hotelId, roleId } = await request.json();
   const { data: allowed } = await caller.rpc("has_hotel_permission", {
     target_hotel_id: hotelId,
     required_code: "staff.manage",
@@ -53,15 +58,9 @@ Deno.serve(async (request) => {
       { error: "Invalid role" },
       { status: 400, headers: cors },
     );
-  if (typeof redirectTo !== "string" || !redirectTo.startsWith("http")) {
-    return Response.json(
-      { error: "A valid invitation redirect address is required" },
-      { status: 400, headers: cors },
-    );
-  }
   const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
     data: { full_name: fullName },
-    redirectTo,
+    redirectTo: staffInviteRedirectUrl,
   });
   if (error || !data.user)
     return Response.json(

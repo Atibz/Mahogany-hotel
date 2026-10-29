@@ -43,7 +43,7 @@ export const helpGuides: HelpGuide[] = [
       "Review the dates and nightly rate, then confirm check-in.",
       "Confirm the success message. The stay and an open folio are created by the system.",
     ],
-    note: "A room that is dirty, blocked, occupied, or unavailable cannot be checked in. Ask the GM or Owner if a management exception is needed; do not bypass the room control.",
+    note: "A room that is dirty, blocked, occupied, or unavailable cannot be checked in. Ask the GM if a management exception is needed; do not bypass the room control.",
   },
   {
     id: "occupant-details",
@@ -102,10 +102,10 @@ export const helpGuides: HelpGuide[] = [
     roles: ["owner", "general_manager", "receptionist", "accountant"],
     keywords: ["business date", "room charge", "approve", "close day", "cashier shift"],
     steps: [
-      "Review the night-audit exceptions and current business date before posting. Resolve payment, cashier-shift, and posting issues; the Owner/GM must reason-acknowledge overdue departures or unsettled folios before business-day close.",
-      "An Accountant, GM, or Owner approves the current business date for posting.",
+      "Review the night-audit exceptions and current business date before posting. Resolve payment, cashier-shift, and posting issues; the GM must reason-acknowledge overdue departures or unsettled folios before business-day close.",
+      "An Accountant or GM approves the current business date for posting.",
       "A different authorized user runs the night audit for that date; the approver cannot run the same date.",
-      "Review the result and any posting errors. Business-day close is a separate Owner/GM action and should only follow its required checks.",
+      "Review the result and any posting errors. Business-day close is a separate GM action and should only follow its required checks.",
     ],
     note: "Night audit posts eligible room charges; it does not automatically check guests out or advance the business date. If approval, date, or totals look wrong, stop and contact the GM or Accountant.",
   },
@@ -275,10 +275,10 @@ export const helpGuides: HelpGuide[] = [
     keywords: ["discount", "price", "rate", "approve", "20%"],
     steps: [
       "Review the room's displayed rate and the proposed discount on the reservation form or amendment.",
-      "If the discount exceeds 20%, enter the required reason and submit it for independent GM or Owner approval; the reservation is created at the standard rate while it waits.",
+      "If the discount exceeds 20%, enter the required reason and submit it for independent GM approval; the reservation is created at the standard rate while it waits.",
       "Recheck the approved final amount before confirming it to the guest.",
     ],
-    note: "Do not split or misstate a discount to evade approval. The GM is the hotel's normal approver; the app also permits an independent Owner decision.",
+    note: "Do not split or misstate a discount to evade approval. The GM is the hotel's normal approver.",
   },
   {
     id: "room-move",
@@ -308,7 +308,7 @@ export const helpGuides: HelpGuide[] = [
       "Enter the new checkout date and reason; check that the room is available for the additional nights.",
       "Save, then verify the new stay dates and review the folio for subsequent room charges.",
     ],
-    note: "Only Owner/GM can change the extension rate here. An extension does not itself prove that extra nights have been posted or paid.",
+    note: "Only the GM can normally change the extension rate here. An extension does not itself prove that extra nights have been posted or paid.",
   },
   {
     id: "room-turnover",
@@ -323,7 +323,7 @@ export const helpGuides: HelpGuide[] = [
       "Check that cleaning and inspection are truly complete, then use Mark clean and confirm the room turnover; add notes if useful.",
       "Verify the room status changes to available before assigning a same-day arrival.",
     ],
-    note: "Owner/GM can use Override housekeeping hold with a recorded reason. An override is an exception, not a substitute for cleaning or a way around an active maintenance block.",
+    note: "The GM can use Override housekeeping hold with a recorded reason. An override is an exception, not a substitute for cleaning or a way around an active maintenance block.",
   },
   {
     id: "room-setup",
@@ -428,7 +428,7 @@ export const helpGuides: HelpGuide[] = [
     steps: [
       "Open Approvals and locate the financial correction request and its source document.",
       "Check the reason, amount, supporting evidence, and whether the action changes a hotel or outlet record.",
-      "The Owner or GM approves or rejects another person's request with a decision note; an approved request is then executed through its separate action.",
+      "The GM approves or rejects another person's request with a decision note; an approved request is then executed through its separate action.",
       "Verify the final status in the register and source history rather than changing the original record by hand.",
     ],
     note: "Your role may show a request but not decision controls. Approval is not execution, and a requester's own approval may be blocked.",
@@ -505,7 +505,7 @@ export const helpGuides: HelpGuide[] = [
     keywords: ["business billing", "company", "agency", "direct bill", "credit"],
     steps: [
       "Confirm the company or agency is an approved active account and check its credit terms.",
-      "On the reservation choose Business billing and select the account. Reception can link it as Reference only; Owner/GM can choose Direct bill and reserve an approved credit amount.",
+      "On the reservation choose Business billing and select the account. Reception can link it as Reference only; the GM can choose Direct bill and reserve an approved credit amount.",
       "Record the company instruction, approver, or supporting reference, then save and check the billing label on the reservation.",
     ],
     note: "Saving business billing reserves credit but does not settle the folio or issue an invoice. A company reference is not automatically a direct-bill authorization; the receivable is created on authorized checkout.",
@@ -520,10 +520,10 @@ export const helpGuides: HelpGuide[] = [
     keywords: ["business account", "agency", "company", "credit limit", "payment terms"],
     steps: [
       "Search the business-account register before creating a company or agency to avoid a duplicate.",
-      "Owner/GM can use New business account and record the legal identity, billing contacts, limits, and terms.",
+      "The GM can use New business account and record the legal identity, billing contacts, limits, and terms.",
       "Review the account status and instructions before selecting it for any reservation or direct bill.",
     ],
-    note: "Accountant access to this page includes review and settlement work; account creation and management controls belong to Owner/GM.",
+    note: "Accountant access to this page includes review and settlement work; account creation and management controls belong to the GM.",
   },
   {
     id: "company-receivable",
@@ -551,8 +551,8 @@ export const helpGuides: HelpGuide[] = [
     keywords: ["company", "credit note", "refund", "invoice", "approval"],
     steps: [
       "In Company credits, select Request credit note for an eligible closed company invoice and enter the amount and reason.",
-      "Owner or Accountant may request a separate refund only where a company credit exists; identify the original payment and payout reference.",
-      "An independent GM or Owner must approve and execute the request in Payments & receipts → Approvals.",
+      "The Accountant may request a separate refund only where a company credit exists; identify the original payment and payout reference.",
+      "An independent GM must approve and execute the request in Payments & receipts → Approvals.",
       "Review the issued credit note or refund record against the company ledger afterward.",
     ],
     note: "A credit note reduces the invoice balance; it is not evidence that cash was returned. The app does not send refund money.",
@@ -589,16 +589,18 @@ export const helpGuides: HelpGuide[] = [
   },
   {
     id: "internal-balancing",
-    title: "Compare collections and expenses",
-    summary: "Review hotel, restaurant, and bar movement without mixing accounts.",
+    title: "Reconcile daily collections and expenses",
+    summary: "Match hotel, restaurant, and bar money to evidence and obtain independent sign-off.",
     route: "/internal-balancing",
     routeLabel: "Open Internal balancing",
     roles: ["owner", "general_manager", "accountant"],
     keywords: ["balancing", "collections", "expenses", "restaurant", "bar", "hotel"],
     steps: [
-      "Choose a date range in Collections & expenses and inspect each business line separately.",
-      "Compare recorded collections and refunds with approved and pending expenses; investigate any gap using the source records.",
-      "Use the hotel, restaurant, and bar payment histories for evidence before drawing a conclusion.",
+      "Choose the payment business date in Daily reconciliation and configure each business line's funding accounts by payment method.",
+      "Assign already-paid expenses to their funding account, actual payment business date, and evidence reference; document other money movements separately.",
+      "Resolve the listed blockers, review cashier shifts, and enter opening and actual closing balances using cash-count or bank evidence. Explain every variance and rejected paid expense.",
+      "Submit for an independent GM to approve or reject. If source records change, review Live records and prepare a correction; signed versions remain preserved.",
+      "Export the selected snapshot for signed figures and evidence, or use the period comparison below for collections and incurred-date expenses.",
     ],
     note: "This is internal balancing, not a profit, tax, or statutory accounting report. It does not authorize pooling hotel and outlet receipts or changing a payment's legal entity.",
   },
@@ -643,7 +645,7 @@ export const helpGuides: HelpGuide[] = [
     steps: [
       "Use the restaurant outlet's own cash-shift controls before taking cash. Close with the declared cash count and a variance reason if needed.",
       "Find the source order or payment before using Void unpaid order or Request line correction when those actions are shown.",
-      "Owner/GM may request a refund against a completed payment when customer credit exists. Record the reason, wait for the independent finance decision, and verify the resulting history.",
+      "The GM may request a refund against a completed payment when customer credit exists. Record the reason, wait for the independent finance decision, and verify the resulting history.",
     ],
     note: "A correction request does not immediately reverse a sale. Do not use hotel folios or hotel cashier shifts for restaurant money.",
   },
@@ -658,7 +660,7 @@ export const helpGuides: HelpGuide[] = [
     steps: [
       "Use the bar outlet's own cash-shift controls before taking cash. Close with the declared cash count and a variance reason if needed.",
       "Find the source order or payment before using Void unpaid order or Request line correction when those actions are shown.",
-      "Owner/GM may request a refund against a completed payment when customer credit exists. Record the reason, wait for the independent finance decision, and verify the final history.",
+      "The GM may request a refund against a completed payment when customer credit exists. Record the reason, wait for the independent finance decision, and verify the final history.",
     ],
     note: "Bar collections and handovers must stay separate from restaurant and hotel records.",
   },
@@ -705,7 +707,7 @@ export const helpGuides: HelpGuide[] = [
       "Enter the name, email, and job role, then choose Invite staff once; wait for the success or error message.",
       "Ask the employee to complete the email invitation and set their own password. Confirm their account and role appear correctly before assigning work.",
     ],
-    note: "Do not share passwords or invite the same address repeatedly. The form does not offer Owner as an assignable role.",
+    note: "Do not share passwords or invite the same address repeatedly. Only assign roles shown in the form.",
   },
   {
     id: "staff-access",
@@ -720,7 +722,7 @@ export const helpGuides: HelpGuide[] = [
       "Select a new role and confirm the change, or choose Deactivate and confirm that access should end.",
       "Check the success message and updated list; use Restore access only when employment and authorization are confirmed.",
     ],
-    note: "This page blocks self-changes and Owner-account changes. Deactivation preserves financial and operational history; it does not delete the Auth account.",
+    note: "This page blocks self-changes. Deactivation preserves financial and operational history; it does not delete the Auth account.",
   },
   {
     id: "audit-register",
@@ -733,9 +735,9 @@ export const helpGuides: HelpGuide[] = [
     steps: [
       "Search by document or actor, and narrow the action, entity, and date filters as needed.",
       "Open a matching record to inspect its timestamp and recorded details; compare it with the source transaction.",
-      "Use Export visible rows for the current filtered page when you need a CSV copy.",
+      "Use Export visible rows for the current page, or Export all matching for every record under the applied filters.",
     ],
-    note: "The register is read-only. An export reflects visible filtered rows, not necessarily all history; check pagination and filters before relying on it.",
+    note: "The register is read-only. Check date and other filters before exporting. CSV cannot store column widths; widen the Details column in your spreadsheet app to inspect JSON evidence.",
   },
   {
     id: "stay-policy",
@@ -746,7 +748,7 @@ export const helpGuides: HelpGuide[] = [
     roles: ["owner", "general_manager"],
     keywords: ["stay policy", "check-in time", "checkout time", "late checkout", "early arrival"],
     steps: [
-      "Confirm the hotel's actual standard check-in and checkout times with the owner.",
+      "Confirm the hotel's approved standard check-in and checkout times.",
       "Enter the standard times and exception-handling notes on Stay policy.",
       "Save and review the recorded values before staff quote them to guests.",
     ],
@@ -755,13 +757,13 @@ export const helpGuides: HelpGuide[] = [
   {
     id: "cancellation-policy",
     title: "Record confirmed cancellation terms",
-    summary: "Capture the owner's agreed cancellation and no-show rules.",
+    summary: "Capture the hotel's agreed cancellation and no-show rules.",
     route: "/settings/reservation-cancellation-policy",
     routeLabel: "Open Cancellation policy",
     roles: ["owner", "general_manager"],
     keywords: ["cancellation", "no-show", "policy", "guest terms", "deposit"],
     steps: [
-      "Obtain the exact guest-facing wording and grace periods from the owner and accountant.",
+      "Obtain the approved guest-facing wording and grace periods from hotel leadership and the accountant.",
       "Enter the free-cancellation window, no-show grace period, and any recorded night-based policy; review the displayed explanation.",
       "Save and confirm the policy before relying on it for new reservations.",
     ],

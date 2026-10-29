@@ -1,3 +1,4 @@
+import { FormSubmitButton } from "@/components/shared/form-submit-button";
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -605,12 +606,12 @@ export function RoomsPage() {
               placeholder="Size (sq ft)"
               className="rounded-lg border border-stone-300 px-3 py-2.5"
             />
-            <button
+            <FormSubmitButton
               disabled={busy}
               className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 sm:col-span-2"
             >
               Add room type
-            </button>
+            </FormSubmitButton>
           </form>
           <form
             onSubmit={handleCreateRoom}
@@ -645,12 +646,12 @@ export function RoomsPage() {
               placeholder="Override rate (₦)"
               className="rounded-lg border border-stone-300 px-3 py-2.5"
             />
-            <button
+            <FormSubmitButton
               disabled={busy || !roomTypes.data?.some((type) => type.active)}
               className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 sm:col-span-4"
             >
               Add room
-            </button>
+            </FormSubmitButton>
           </form>
         </div>
       )}
@@ -1162,12 +1163,12 @@ export function RoomsPage() {
               />{" "}
               Active
             </label>
-            <button
+            <FormSubmitButton
               disabled={busy}
               className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white"
             >
               Save changes
-            </button>
+            </FormSubmitButton>
           </form>
         )}
       </Modal>
@@ -1208,12 +1209,12 @@ export function RoomsPage() {
             <label className="flex items-center gap-2 text-sm">
               <input name="active" type="checkbox" defaultChecked /> Active
             </label>
-            <button
+            <FormSubmitButton
               disabled={busy}
               className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white"
             >
               Save changes
-            </button>
+            </FormSubmitButton>
           </form>
         )}
       </Modal>
@@ -1235,12 +1236,12 @@ export function RoomsPage() {
               placeholder="Reason for blocking"
               className="rounded-lg border border-stone-300 px-3 py-2.5"
             />
-            <button
+            <FormSubmitButton
               disabled={busy}
               className="rounded-lg bg-red-700 px-4 py-2.5 text-sm font-semibold text-white"
             >
               Block room
-            </button>
+            </FormSubmitButton>
           </form>
         )}
       </Modal>
@@ -1261,12 +1262,12 @@ export function RoomsPage() {
               placeholder="Cleaning or inspection notes (optional)"
               className="rounded-lg border border-stone-300 px-3 py-2.5"
             />
-            <button
+            <FormSubmitButton
               disabled={busy}
               className="rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white"
             >
               Mark room clean
-            </button>
+            </FormSubmitButton>
           </form>
         )}
       </Modal>
@@ -1289,12 +1290,12 @@ export function RoomsPage() {
               placeholder="Reason for overriding the housekeeping hold"
               className="rounded-lg border border-stone-300 px-3 py-2.5"
             />
-            <button
+            <FormSubmitButton
               disabled={busy}
               className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white"
             >
               Record override and release room
-            </button>
+            </FormSubmitButton>
           </form>
         )}
       </Modal>
@@ -1470,12 +1471,12 @@ export function RoomsPage() {
               >
                 Cancel
               </button>
-              <button
+              <FormSubmitButton
                 disabled={busy}
                 className="rounded-xl bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {busy ? "Moving guest…" : "Confirm room move"}
-              </button>
+              </FormSubmitButton>
             </div>
           </form>
         )}
@@ -1540,12 +1541,12 @@ export function RoomsPage() {
               >
                 Cancel
               </button>
-              <button
+              <FormSubmitButton
                 disabled={busy}
                 className="rounded-xl bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {busy ? "Extending stay…" : "Confirm extension"}
-              </button>
+              </FormSubmitButton>
             </div>
           </form>
         )}

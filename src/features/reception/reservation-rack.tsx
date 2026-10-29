@@ -1,13 +1,13 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { Modal } from "@/components/shared/modal";
-import { formatNaira } from "@/lib/money";
-
-import type { Reservation, RoomBoardItem } from "./reception-service";
+import type { Reservation, ReservationBusinessAuthorization, ReservationCancellationPolicy, RoomBoardItem } from "./reception-service";
+import { ReservationDetailsModal } from "./reservation-details-modal";
+import type { ReservationAction } from "./reservation-actions";
+import { reservationMatchesSearch } from "./reservation-search";
+import { getRackReservations, getUnassignedRackReservations } from "./reservation-rack-data";
 
 const WINDOW_DAYS = 14;
-const activeStatuses = new Set(["pending", "confirmed", "checked_in"]);
 
 function parseDate(value: string) {
   return new Date(`${value}T00:00:00`);
@@ -44,9 +44,23 @@ function statusLabel(status: string) {
 export function ReservationRack({
   rooms,
   reservations,
+  businessAuthorizations,
+  canManageReservations,
+  emailingReservationId,
+  cancellationPolicy,
+  nowMs,
+  searchTerm,
+  onAction,
 }: {
   rooms: RoomBoardItem[];
   reservations: Reservation[];
+  businessAuthorizations: ReservationBusinessAuthorization[];
+  canManageReservations: boolean;
+  emailingReservationId: string | null;
+  cancellationPolicy?: ReservationCancellationPolicy | null;
+  nowMs: number;
+  searchTerm: string;
+  onAction: (reservation: Reservation, action: ReservationAction) => void;
 }) {
   const [windowStart, setWindowStart] = useState(() => {
     const today = new Date();
@@ -62,12 +76,9 @@ export function ReservationRack({
     [windowStart],
   );
   const windowEnd = addDays(windowStart, WINDOW_DAYS);
-  const rackReservations = reservations.filter(
-    (reservation) =>
-      activeStatuses.has(reservation.status) &&
-      parseDate(reservation.check_in_date) < windowEnd &&
-      parseDate(reservation.check_out_date) > windowStart,
-  );
+  const rackReservations = getRackReservations(reservations, toIsoDate(windowStart), toIsoDate(windowEnd));
+  const matchingRackReservations = rackReservations.filter((reservation) => reservationMatchesSearch(reservation, searchTerm));
+  const unassignedReservations = getUnassignedRackReservations(rackReservations);
   const groupedRooms = Object.entries(
     rooms.reduce<Record<string, RoomBoardItem[]>>((groups, room) => {
       (groups[room.room_type_name] ??= []).push(room);
@@ -136,6 +147,14 @@ export function ReservationRack({
           </span>
         ))}
       </div>
+
+      {searchTerm.trim() && (
+        <p className="border-b border-stone-100 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
+          {matchingRackReservations.length
+            ? `${matchingRackReservations.length} matching booking(s) in these 14 days. Other bookings remain visible so availability is not misleading.`
+            : "No matching active bookings in these 14 days. Other bookings remain visible; switch to List to search full history."}
+        </p>
+      )}
 
       <div className="hidden overflow-x-auto lg:block">
         <div className="min-w-[86rem]">
@@ -227,7 +246,7 @@ export function ReservationRack({
                             gridColumn: `${start + 2} / ${end + 2}`,
                             gridRow: 1,
                           }}
-                          className={`z-[1] m-1 min-w-0 truncate rounded-lg border px-2.5 py-2 text-left text-xs font-semibold shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${statusStyle(reservation.status)}`}
+                          className={`z-[1] m-1 min-w-0 truncate rounded-lg border px-2.5 py-2 text-left text-xs font-semibold shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${statusStyle(reservation.status)} ${searchTerm.trim() && reservationMatchesSearch(reservation, searchTerm) ? "ring-2 ring-amber-800" : ""}`}
                           title={`${reservation.guests?.full_name ?? "Guest"} · ${reservation.reservation_number}`}
                         >
                           <span className="block truncate">
@@ -247,6 +266,28 @@ export function ReservationRack({
         </div>
       </div>
 
+      {unassignedReservations.length > 0 && (
+        <div className="hidden border-t border-stone-200 lg:block">
+          <div className="bg-amber-50 px-4 py-3">
+            <h3 className="text-sm font-semibold text-amber-950">Unassigned reservations · {unassignedReservations.length}</h3>
+            <p className="mt-1 text-xs text-amber-900">These bookings overlap the displayed dates but cannot appear on a room row until assigned.</p>
+          </div>
+          <div className="grid gap-2 p-4 sm:grid-cols-2 xl:grid-cols-3">
+            {unassignedReservations.map((reservation) => (
+              <button
+                key={reservation.id}
+                type="button"
+                onClick={() => setSelected(reservation)}
+                className={`rounded-lg border p-3 text-left text-sm transition hover:shadow-md ${statusStyle(reservation.status)} ${searchTerm.trim() && reservationMatchesSearch(reservation, searchTerm) ? "ring-2 ring-amber-800" : ""}`}
+              >
+                <span className="block font-semibold">{reservation.guests?.full_name ?? "Guest"} · {reservation.reservation_number}</span>
+                <span className="mt-1 block text-xs">{reservation.check_in_date} → {reservation.check_out_date} · {statusLabel(reservation.status)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="divide-y divide-stone-100 lg:hidden">
         {rackReservations.length ? (
           rackReservations
@@ -256,7 +297,7 @@ export function ReservationRack({
                 key={reservation.id}
                 type="button"
                 onClick={() => setSelected(reservation)}
-                className="flex w-full items-center gap-3 p-4 text-left hover:bg-stone-50"
+                className={`flex w-full items-center gap-3 p-4 text-left hover:bg-stone-50 ${searchTerm.trim() && reservationMatchesSearch(reservation, searchTerm) ? "bg-amber-50" : ""}`}
               >
                 <span
                   className={`h-12 w-1 shrink-0 rounded-full ${reservation.status === "checked_in" ? "bg-emerald-500" : reservation.status === "confirmed" ? "bg-sky-500" : "bg-amber-500"}`}
@@ -277,62 +318,26 @@ export function ReservationRack({
             ))
         ) : (
           <p className="p-6 text-center text-sm text-stone-500">
-            No active reservations overlap this date window.
+            {searchTerm.trim()
+              ? "No matching active bookings in this date window. Switch to List for full history."
+              : "No active reservations overlap this date window."}
           </p>
         )}
       </div>
 
-      <Modal
-        open={Boolean(selected)}
-        title="Reservation details"
+      <ReservationDetailsModal
+        reservation={selected}
+        businessAuthorization={businessAuthorizations.find((item) => item.reservation_id === selected?.id)}
+        canManageReservations={canManageReservations}
+        emailingReservationId={emailingReservationId}
+        cancellationPolicy={cancellationPolicy}
+        nowMs={nowMs}
         onClose={() => setSelected(null)}
-      >
-        {selected && (
-          <div className="space-y-4">
-            <div
-              className={`rounded-xl border p-4 ${statusStyle(selected.status)}`}
-            >
-              <p className="text-xs font-bold uppercase tracking-wide opacity-70">
-                {statusLabel(selected.status)}
-              </p>
-              <p className="mt-1 text-lg font-semibold">
-                {selected.guests?.full_name ?? "Guest"}
-              </p>
-              <p className="mt-1 text-sm">{selected.reservation_number}</p>
-            </div>
-            <dl className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <dt className="text-stone-500">Room</dt>
-                <dd className="mt-1 font-semibold">
-                  {selected.rooms?.room_number ?? "Unassigned"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-stone-500">Room type</dt>
-                <dd className="mt-1 font-semibold">
-                  {selected.room_types?.name ?? "—"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-stone-500">Check-in</dt>
-                <dd className="mt-1 font-semibold">{selected.check_in_date}</dd>
-              </div>
-              <div>
-                <dt className="text-stone-500">Check-out</dt>
-                <dd className="mt-1 font-semibold">
-                  {selected.check_out_date}
-                </dd>
-              </div>
-              <div className="col-span-2">
-                <dt className="text-stone-500">Agreed nightly rate</dt>
-                <dd className="mt-1 font-semibold">
-                  {formatNaira(selected.agreed_rate_kobo)}
-                </dd>
-              </div>
-            </dl>
-          </div>
-        )}
-      </Modal>
+        onAction={(reservation, action) => {
+          setSelected(null);
+          onAction(reservation, action);
+        }}
+      />
     </section>
   );
 }

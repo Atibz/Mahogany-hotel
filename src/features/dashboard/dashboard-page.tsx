@@ -45,6 +45,9 @@ export function DashboardPage() {
   const canSeeFinancialOverview = roleCodes.some((role) =>
     ["owner", "general_manager", "cashier", "accountant"].includes(role),
   );
+  const canRecordPayment = roleCodes.some((role) =>
+    ["owner", "general_manager", "receptionist", "cashier"].includes(role),
+  );
   const canSeeManagementSummary = roleCodes.some((role) =>
     ["owner", "general_manager"].includes(role),
   );
@@ -303,8 +306,10 @@ export function DashboardPage() {
     ...(canSeeFinancialOverview
       ? [
           {
-            label: "Record payment",
-            detail: "Open folios and receipts",
+            label: canRecordPayment ? "Record payment" : "Review folios",
+            detail: canRecordPayment
+              ? "Open folios and receipts"
+              : "Check balances and receipts",
             to: "/folios",
             icon: CircleDollarSign,
           },
@@ -861,8 +866,7 @@ export function DashboardPage() {
             <div>
               <h2 className="text-lg font-semibold">Management attention</h2>
               <p className="mt-1 text-sm text-stone-600">
-                Live operational conditions that should be reviewed by the GM or
-                Owner.
+                Live operational conditions that should be reviewed by the GM.
               </p>
             </div>
             <span

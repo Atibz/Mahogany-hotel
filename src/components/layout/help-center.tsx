@@ -141,7 +141,7 @@ export function HelpCenter({ open, onClose }: HelpCenterProps) {
           ) : error ? (
             <p className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-950" role="alert">
               We couldn’t confirm your role, so role-specific guides are
-              unavailable. Refresh the page or ask the Owner/GM to check your
+              unavailable. Refresh the page or ask the GM to check your
               account access.
             </p>
           ) : guides.length ? (
@@ -218,7 +218,7 @@ export function HelpCenter({ open, onClose }: HelpCenterProps) {
               </p>
               <p className="mx-auto mt-1 max-w-sm text-sm leading-5 text-stone-600">
                 Try another search. If the process is not covered here, ask the
-                General Manager or Owner before proceeding.
+                General Manager before proceeding.
               </p>
             </div>
           )}

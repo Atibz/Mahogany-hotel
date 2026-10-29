@@ -1,3 +1,4 @@
+import { FormSubmitButton } from "@/components/shared/form-submit-button";
 import { useRef, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { BookOpen, CircleDollarSign, Moon, Search } from "lucide-react";
@@ -10,8 +11,11 @@ import {
   PageLoading,
 } from "@/components/shared/page-state";
 import { useAccess } from "@/features/auth/use-access";
+import { useAuth } from "@/features/auth/auth-provider";
 import { formatNaira, nairaToKobo } from "@/lib/money";
 import { FolioPaymentHistory } from "./folio-payment-history";
+import { CombinedPaymentPanel } from "./combined-payment-panel";
+import { auditStaffLabel, canRunApprovedNightAudit } from "./night-audit-access";
 import {
   createFolioAdjustment,
   approveCurrentNightAudit,
@@ -39,6 +43,7 @@ type Action =
 type AcknowledgementCode = "overdue_departures" | "unsettled_open_folios";
 
 export function FoliosPage() {
+  const { session } = useAuth();
   const hotel = useActiveHotel();
   const folios = useFolios(hotel.data?.id);
   const methods = usePaymentMethods(hotel.data?.id);
@@ -406,7 +411,7 @@ export function FoliosPage() {
               The accountant reviews the day and approves posting; an authorized staff member then runs the audit.
               Cashier shifts, payment verification, and posting failures must be
               resolved. Overdue departures and unsettled folios require a
-              reasoned Owner or GM acknowledgement.
+              reasoned GM acknowledgement.
             </p>
             <dl className="mt-4 grid gap-2 sm:grid-cols-2">
               {nightAuditExceptions.data?.map((exception) => (
@@ -435,10 +440,10 @@ export function FoliosPage() {
               </p>
               {auditApproval.data?.approval_id ? (
                 <p className="mt-1">
-                  Approved by {auditApproval.data.approved_by_name ?? "authorized staff"}
+                  Approved by {auditStaffLabel(auditApproval.data.approved_by_name, auditApproval.data.approved_by_role_name)}
                   {auditApproval.data.approved_at ? ` at ${new Date(auditApproval.data.approved_at).toLocaleString()}` : ""}.
                   {auditApproval.data.executed_at
-                    ? ` Run by ${auditApproval.data.executed_by_name ?? "staff"}.`
+                    ? ` Run by ${auditStaffLabel(auditApproval.data.executed_by_name, auditApproval.data.executed_by_role_name)}.`
                     : " A different authorized staff member must run it."}
                 </p>
               ) : auditApproval.data?.posting_status === "completed" ? (
@@ -458,7 +463,7 @@ export function FoliosPage() {
                   Approve night audit
                 </button>
               )}
-              {canRunNightAudit && auditApproval.data?.approval_id && !auditApproval.data.executed_at && (
+              {canRunApprovedNightAudit(canRunNightAudit, session?.user.id, auditApproval.data) && (
                 <button
                   type="button"
                   disabled={busy}
@@ -771,6 +776,17 @@ export function FoliosPage() {
               </div>
             </div>
           )}
+          {hotel.data?.id && <CombinedPaymentPanel
+            key={selected.id}
+            hotelId={hotel.data.id}
+            folioId={selected.id}
+            folioBalanceKobo={selected.balance_kobo}
+            methods={methods.data ?? []}
+            canCollect={selected.status === "open" && canRecordPayment}
+            isAccountant={roleCodes.includes("accountant")}
+            canRequestRefund={roleCodes.some((role) => ["owner", "general_manager", "accountant"].includes(role))}
+            onChanged={refresh}
+          />}
           <FolioPaymentHistory folioId={selected.id} onChanged={refresh} />
         </div>
       )}
@@ -1027,12 +1043,12 @@ export function FoliosPage() {
               placeholder="Explain why the hotel may close with this exception"
               className="rounded-xl border border-stone-300 px-3 py-2.5"
             />
-            <button
+            <FormSubmitButton
               disabled={busy}
               className="rounded-xl bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
             >
               Confirm acknowledgement
-            </button>
+            </FormSubmitButton>
           </form>
         )}
       </Modal>
@@ -1072,12 +1088,12 @@ export function FoliosPage() {
               placeholder="Reason"
               className="rounded border px-3 py-2.5"
             />
-            <button
+            <FormSubmitButton
               disabled={busy}
               className="rounded bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white"
             >
               Confirm
-            </button>
+            </FormSubmitButton>
           </form>
         )}
       </Modal>

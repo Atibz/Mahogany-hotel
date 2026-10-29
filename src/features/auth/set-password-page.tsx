@@ -1,3 +1,4 @@
+import { FormSubmitButton } from "@/components/shared/form-submit-button";
 import { Eye, EyeOff, LoaderCircle } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
@@ -112,10 +113,10 @@ export function SetPasswordPage() {
               </button>
             </div>
             {message && <p className="mt-4 text-sm text-red-700" role="alert">{message}</p>}
-            <button disabled={isSubmitting} className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-950 disabled:opacity-70">
+            <FormSubmitButton disabled={isSubmitting || password !== confirmation} className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-950 disabled:opacity-70">
               {isSubmitting && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}
               {isSubmitting ? 'Saving password…' : 'Save password'}
-            </button>
+            </FormSubmitButton>
           </form>
         ) : (
           <p className="mt-6 text-sm text-red-700" role="alert">{message}</p>

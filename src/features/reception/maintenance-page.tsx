@@ -1,3 +1,4 @@
+import { FormSubmitButton } from "@/components/shared/form-submit-button";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -423,12 +424,12 @@ export function MaintenancePage() {
             placeholder="Describe the fault and guest impact"
             className="rounded-lg border border-stone-300 px-3 py-2.5"
           />
-          <button
+          <FormSubmitButton
             disabled={busy || rooms.isLoading || roomListUnavailable}
             className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white"
           >
             Report fault
-          </button>
+          </FormSubmitButton>
         </form>
       </Modal>
       <Modal
@@ -456,12 +457,12 @@ export function MaintenancePage() {
                 This records that repair work has started.
               </p>
             )}
-            <button
+            <FormSubmitButton
               disabled={busy}
               className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white"
             >
               Confirm
-            </button>
+            </FormSubmitButton>
           </form>
         )}
       </Modal>

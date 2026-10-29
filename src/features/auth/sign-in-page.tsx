@@ -1,3 +1,4 @@
+import { FormSubmitButton } from "@/components/shared/form-submit-button";
 import { Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Navigate } from "react-router-dom";
@@ -164,14 +165,14 @@ export function SignInPage() {
           {feedback?.text}
         </div>
 
-        <button
+        <FormSubmitButton
           type="submit"
           disabled={isBusy}
           className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-700 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
         >
           {isSubmitting && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}
           {isSubmitting ? "Signing in…" : "Sign in"}
-        </button>
+        </FormSubmitButton>
         <button
           type="button"
           disabled={isBusy}

@@ -66,8 +66,8 @@ cross join public.permissions p
 where r.hotel_id = '00000000-0000-4000-8000-000000000001'
   and (
     (r.code = 'general_manager' and p.code in ('settings.read', 'settings.manage', 'staff.read', 'audit.read', 'guests.read', 'guests.create', 'reservations.read', 'reservations.create', 'stays.read', 'stays.check_in', 'folios.read', 'night_audit.read', 'night_audit.run'))
-    or (r.code = 'staff_admin' and p.code in ('settings.read', 'staff.read', 'staff.manage', 'audit.read'))
     or (r.code = 'receptionist' and p.code in ('guests.read', 'guests.create', 'reservations.read', 'reservations.create', 'stays.read', 'stays.check_in', 'folios.read'))
+    or (r.code in ('cashier', 'accountant') and p.code = 'folios.read')
   )
 on conflict do nothing;
 

@@ -1,3 +1,4 @@
+import { FormSubmitButton } from "@/components/shared/form-submit-button";
 import { useRef, useState, type FormEvent } from "react";
 
 import { Modal } from "@/components/shared/modal";
@@ -179,9 +180,11 @@ export function FolioPaymentHistory({
                       </p>
                     ))}
                   </td>
-                  <td className="px-4 py-3 capitalize">{payment.status}</td>
+                  <td className="px-4 py-3 capitalize">
+                    {payment.status.replaceAll("_", " ")}
+                  </td>
                   <td className="px-4 py-3">
-                    {payment.status === "completed" &&
+                    {payment.status === "completed" && !payment.is_combined &&
                       (canVoid || canRefund) && (
                         <div className="flex gap-2">
                           {canVoid && payment.refunds.length === 0 && (
@@ -195,7 +198,7 @@ export function FolioPaymentHistory({
                               }
                               className="text-xs font-semibold text-red-700"
                             >
-                              Void
+                              Request void
                             </button>
                           )}
                           {canRefund && refundableAmount > 0 && (
@@ -209,7 +212,7 @@ export function FolioPaymentHistory({
                               }
                               className="text-xs font-semibold text-amber-900"
                             >
-                              Refund
+                              Request refund
                             </button>
                           )}
                         </div>
@@ -224,6 +227,8 @@ export function FolioPaymentHistory({
                       >
                         View {payment.receipt_number}
                       </button>
+                    ) : payment.is_combined ? (
+                      <span className="text-xs text-amber-900">Combined collection — acknowledgement above</span>
                     ) : payment.status === "pending_verification" ? (
                       <span className="text-xs text-stone-500">
                         After verification
@@ -245,11 +250,19 @@ export function FolioPaymentHistory({
       </div>
       <Modal
         open={Boolean(action)}
-        title={action?.kind === "void" ? "Void payment" : "Refund payment"}
+        title={
+          action?.kind === "void"
+            ? "Request payment void"
+            : "Request payment refund"
+        }
         onClose={() => setAction(null)}
       >
         {action && (
           <form onSubmit={submit} className="grid gap-3">
+            <p className="text-sm text-stone-600">
+              This request will not change the payment until an independent
+              General Manager approves it.
+            </p>
             <div className="rounded-xl bg-stone-50 p-4 text-sm">
               <p className="font-semibold">{action.payment.payment_number}</p>
               <div className="mt-2 grid grid-cols-2 gap-3 text-stone-600">
@@ -311,12 +324,12 @@ export function FolioPaymentHistory({
               placeholder="Reason"
               className="rounded-lg border border-stone-300 px-3 py-2.5"
             />
-            <button
+            <FormSubmitButton
               disabled={busy}
               className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white"
             >
-              Confirm
-            </button>
+              {busy ? "Submitting…" : "Submit approval request"}
+            </FormSubmitButton>
           </form>
         )}
       </Modal>

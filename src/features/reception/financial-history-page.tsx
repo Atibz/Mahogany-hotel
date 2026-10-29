@@ -1,5 +1,7 @@
+import { FormSubmitButton } from "@/components/shared/form-submit-button";
 import { useState, type FormEvent } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import {
   BadgeDollarSign,
   CircleCheckBig,
@@ -27,6 +29,8 @@ import {
   reviewCashierShift,
   updatePaymentMethod,
   verifyPendingPayment,
+  getCombinedGuestPayments,
+  reviewCombinedGuestPayment,
   type CashierShiftHistory,
   type DailyRevenueTaxReport,
   type DepositGuestCreditLiability,
@@ -35,6 +39,7 @@ import {
   type PendingPaymentVerification,
 } from "./reception-service";
 import { FolioPaymentHistory } from "./folio-payment-history";
+import { CombinedOutletSettlement } from "./combined-outlet-settlement";
 import {
   useActiveHotel,
   useAllPaymentMethods,
@@ -59,6 +64,11 @@ type PaymentMethodAction =
 type FinanceDecisionAction = {
   request: FinanceApprovalRequest;
   approve: boolean;
+};
+type CombinedReviewAction = {
+  paymentId: string;
+  paymentNumber: string;
+  decision: "confirmed" | "disputed";
 };
 type FinanceView =
   | "overview"
@@ -454,6 +464,12 @@ export function FinancialHistoryPage() {
     hotel.data?.id,
     canVerifyPayments,
   );
+  const combinedPayments = useQuery({
+    queryKey: ["combined-payments", hotel.data?.id],
+    queryFn: () => getCombinedGuestPayments(hotel.data!.id),
+    enabled: Boolean(hotel.data?.id) && canViewFinanceRequests,
+    refetchInterval: 30_000,
+  });
   const paymentMethods = useAllPaymentMethods(
     hotel.data?.id,
     canManagePaymentMethods,
@@ -494,6 +510,10 @@ export function FinancialHistoryPage() {
     useState<PaymentMethodAction | null>(null);
   const [financeDecisionAction, setFinanceDecisionAction] =
     useState<FinanceDecisionAction | null>(null);
+  const [combinedReviewAction, setCombinedReviewAction] =
+    useState<CombinedReviewAction | null>(null);
+  const [combinedReviewError, setCombinedReviewError] = useState<string | null>(null);
+  const [combinedReviewMessage, setCombinedReviewMessage] = useState<string | null>(null);
   const [approvalSearch, setApprovalSearch] = useState("");
   const [approvalStatus, setApprovalStatus] = useState("all");
   const [message, setMessage] = useState<string | null>(null);
@@ -559,6 +579,7 @@ export function FinancialHistoryPage() {
       queryClient.invalidateQueries({ queryKey: ["business-account-statement"] }),
       queryClient.invalidateQueries({ queryKey: ["business-credit-positions", hotel.data?.id] }),
       queryClient.invalidateQueries({ queryKey: ["business-credit-notes", hotel.data?.id] }),
+      queryClient.invalidateQueries({ queryKey: ["combined-payments", hotel.data?.id] }),
       queryClient.invalidateQueries({
         queryKey: ["daily-payment-reconciliation", hotel.data?.id],
       }),
@@ -633,7 +654,7 @@ export function FinancialHistoryPage() {
           String(form.get("reason")),
           String(form.get("handoverReference")),
         );
-        setMessage("Cashier shift closed and reconciled.");
+        setMessage("Cashier shift closed and submitted for independent manager review.");
       }
       setShiftAction(null);
       await refresh();
@@ -674,9 +695,12 @@ export function FinancialHistoryPage() {
     setBusy(true);
     try {
       if (verificationAction.kind === "verify") {
+        const combined = combinedPayments.data?.some((item) => item.payment_id === verificationAction.payment.payment_id);
         await verifyPendingPayment(verificationAction.payment.payment_id, note);
         setMessage(
-          `${verificationAction.payment.payment_number} verified and its receipt issued.`,
+          combined
+            ? `${verificationAction.payment.payment_number} verified. The combined collection acknowledgement is available on the folio; no hotel-only receipt was issued.`
+            : `${verificationAction.payment.payment_number} verified and its receipt issued.`,
         );
       } else {
         await rejectPendingPayment(verificationAction.payment.payment_id, note);
@@ -695,6 +719,26 @@ export function FinancialHistoryPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function reviewCombinedPayment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!combinedReviewAction) return;
+    const note = String(new FormData(event.currentTarget).get("note") ?? "").trim();
+    if (note.length < 3) {
+      setCombinedReviewError("Enter a review note of at least three characters.");
+      return;
+    }
+    setBusy(true);
+    setCombinedReviewError(null);
+    try {
+      await reviewCombinedGuestPayment(combinedReviewAction.paymentId, combinedReviewAction.decision, note);
+      await refresh();
+      setCombinedReviewMessage(`${combinedReviewAction.paymentNumber}: phone-approval claim ${combinedReviewAction.decision}.`);
+      setCombinedReviewAction(null);
+    } catch (error) {
+      setCombinedReviewError(error instanceof Error ? error.message : "Accountant review failed.");
+    } finally { setBusy(false); }
   }
 
   async function submitPaymentMethod(event: FormEvent<HTMLFormElement>) {
@@ -774,8 +818,7 @@ export function FinancialHistoryPage() {
         Payments and receipts
       </h1>
       <p className="mt-2 text-sm text-stone-600">
-        Confirmed payments receive receipts. Transfers awaiting verification do
-        not change a folio balance or support checkout.
+        Ordinary confirmed hotel payments receive receipts. Exceptional one-payment collections use a separate acknowledgement. Transfers awaiting verification do not change a folio balance or support checkout.
       </p>
       {message && (
         <p className="mt-4 rounded-xl bg-stone-100 p-3 text-sm" role="status">
@@ -807,7 +850,9 @@ export function FinancialHistoryPage() {
               className="rounded-2xl border border-stone-200 bg-white p-4 text-left shadow-sm transition hover:border-amber-400"
             >
               <CircleCheckBig className="size-5 text-sky-700" />
-              <p className="mt-3 text-xs text-stone-500">Approval decisions</p>
+              <p className="mt-3 text-xs text-stone-500">
+                {canApproveFinance ? "Approval decisions" : "My pending requests"}
+              </p>
               <p className="mt-1 text-2xl font-semibold text-sky-800">
                 {pendingApprovalCount}
               </p>
@@ -874,7 +919,9 @@ export function FinancialHistoryPage() {
             onClick={() => setFinanceView("approvals")}
             className={`shrink-0 rounded-xl px-3 py-2 font-medium ${financeView === "approvals" ? "bg-stone-900 text-white" : "hover:bg-stone-100"}`}
           >
-            Approvals
+            {canVerifyPayments || canApproveFinance
+              ? "Approvals"
+              : "My requests"}
           </button>
         )}
         {(canOperateCashierShift || canReadShiftHistory) && (
@@ -932,9 +979,15 @@ export function FinancialHistoryPage() {
                 onClick={() => setFinanceView("approvals")}
                 className="rounded-2xl border border-stone-200 bg-white p-5 text-left shadow-sm transition hover:border-amber-400 hover:shadow"
               >
-                <p className="font-semibold">Handle approvals</p>
+                <p className="font-semibold">
+                  {canVerifyPayments || canApproveFinance
+                    ? "Handle approvals"
+                    : "Track my correction requests"}
+                </p>
                 <p className="mt-1 text-sm text-stone-500">
-                  Verify transfers and review controlled financial corrections.
+                  {canVerifyPayments || canApproveFinance
+                    ? "Verify transfers and review controlled financial corrections."
+                    : "See the status of financial corrections you have requested."}
                 </p>
               </button>
             )}
@@ -1107,6 +1160,33 @@ export function FinancialHistoryPage() {
         </div>
       )}
 
+      {financeView === "approvals" && canViewFinanceRequests && (
+        <section className="mt-6 rounded-2xl border border-amber-200 bg-white p-5">
+          <h2 className="font-semibold">One-payment exceptions</h2>
+          <p className="mt-1 text-sm text-stone-600">The hotel collected one payment that includes separate restaurant or bar orders. The accountant must confirm or dispute the phone-approval claim; this does not create an outlet tender.</p>
+          {combinedReviewMessage && <p role="status" className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900">{combinedReviewMessage}</p>}
+          {combinedPayments.isError && <p role="alert" className="mt-3 text-sm text-red-700">Unable to load combined-payment exceptions.</p>}
+          {combinedPayments.isLoading && <p className="mt-3 text-sm text-stone-500">Loading exceptions…</p>}
+          {(combinedPayments.data ?? []).filter((payment) => payment.review_status !== "confirmed" || (payment.status === "completed" && payment.orders.some((order) => Number(order.settled_kobo) < Number(order.amount_kobo) || order.settlements.some((settlement) => !settlement.reversed)))).map((payment) => (
+            <article key={payment.payment_id} className="mt-3 rounded-xl border border-stone-200 p-3 text-sm">
+              <p className="font-semibold">{payment.payment_number} · {formatNaira(Number(payment.amount_kobo))} · {payment.review_status.replaceAll("_", " ")}</p>
+              <p>Hotel folio {formatNaira(Number(payment.hotel_amount_kobo))}; outlet portion {formatNaira(Number(payment.amount_kobo) - Number(payment.hotel_amount_kobo))}.</p>
+              <p className="text-stone-600">Phone approval claimed from {payment.verbal_approver_name}. Reason: {payment.reason}</p>
+              {payment.orders.map((order) => <p key={order.order_id} className="text-stone-600">{order.outlet_name} · {order.order_number} · {formatNaira(Number(order.amount_kobo))} guest-paid; {formatNaira(Number(order.amount_kobo) - Number(order.settled_kobo))} still held by hotel</p>)}
+              {payment.review_note && <p className="text-red-700">Review: {payment.review_note}</p>}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Link to={`/folios?folio=${payment.folio_id}`} className="inline-flex min-h-10 items-center justify-center rounded-lg border border-amber-300 bg-white px-3 py-2 font-semibold text-amber-950 hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-700">Open folio</Link>
+                {roleCodes.includes("accountant") && payment.review_status === "awaiting_accountant" && <>
+                  <button type="button" disabled={busy} onClick={() => { setCombinedReviewError(null); setCombinedReviewAction({ paymentId: payment.payment_id, paymentNumber: payment.payment_number, decision: "confirmed" }); }} className="inline-flex min-h-10 items-center justify-center rounded-lg bg-emerald-800 px-4 py-2 font-semibold text-white hover:bg-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 disabled:opacity-50">Confirm phone approval</button>
+                  <button type="button" disabled={busy} onClick={() => { setCombinedReviewError(null); setCombinedReviewAction({ paymentId: payment.payment_id, paymentNumber: payment.payment_number, decision: "disputed" }); }} className="inline-flex min-h-10 items-center justify-center rounded-lg border border-red-300 bg-white px-4 py-2 font-semibold text-red-800 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-700 disabled:opacity-50">Dispute claim</button>
+                </>}
+              </div>
+              {roleCodes.includes("accountant") && <CombinedOutletSettlement payment={payment} onChanged={refresh} />}
+            </article>
+          ))}
+          {!combinedPayments.isLoading && !combinedPayments.isError && !(combinedPayments.data ?? []).some((payment) => payment.review_status !== "confirmed" || (payment.status === "completed" && payment.orders.some((order) => Number(order.settled_kobo) < Number(order.amount_kobo) || order.settlements.some((settlement) => !settlement.reversed)))) && <p className="mt-3 text-sm text-stone-500">No exception needs accountant attention or outlet settlement.</p>}
+        </section>
+      )}
       {financeView === "approvals" && canVerifyPayments && (
         <section
           id="payment-verification"
@@ -1116,8 +1196,7 @@ export function FinancialHistoryPage() {
             Pending payment verification
           </h2>
           <p className="mt-1 text-sm text-amber-900">
-            Confirm the money in the bank or payment-provider record before
-            issuing a receipt.
+            Confirm the money in the bank or payment-provider record. Ordinary payments then receive a receipt; one-payment exceptions use a combined collection acknowledgement.
           </p>
           {pendingPayments.data?.length ? (
             <div className="mt-4 space-y-3">
@@ -1184,7 +1263,7 @@ export function FinancialHistoryPage() {
           <p className="mt-1 text-sm text-amber-900">
             {canApproveFinance
               ? "Approve only requests created by someone else. Approval and execution are separately recorded."
-              : "Your financial correction requests remain here until an independent Owner or GM decides them."}
+              : "Your financial correction requests remain here until an independent GM decides them."}
           </p>
           {financeApprovals.data?.length ? (
             <div className="mt-4 space-y-3">
@@ -1712,12 +1791,12 @@ export function FinancialHistoryPage() {
                 </label>
               </>
             )}
-            <button
+            <FormSubmitButton
               disabled={busy}
               className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white"
             >
               {busy ? "Saving…" : "Confirm"}
-            </button>
+            </FormSubmitButton>
           </form>
         )}
       </Modal>
@@ -1743,12 +1822,47 @@ export function FinancialHistoryPage() {
               }
               className="rounded-lg border border-stone-300 px-3 py-2.5"
             />
-            <button
+            <FormSubmitButton
               disabled={busy}
               className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white"
             >
               {busy ? "Saving…" : "Confirm review"}
-            </button>
+            </FormSubmitButton>
+          </form>
+        )}
+      </Modal>
+      <Modal
+        open={Boolean(combinedReviewAction)}
+        title={combinedReviewAction?.decision === "confirmed" ? "Confirm phone approval" : "Dispute phone-approval claim"}
+        onClose={() => { if (!busy) setCombinedReviewAction(null); }}
+      >
+        {combinedReviewAction && (
+          <form onSubmit={reviewCombinedPayment} className="grid gap-4">
+            <p className="text-sm text-stone-700">
+              {combinedReviewAction.paymentNumber} · {combinedReviewAction.decision === "confirmed"
+                ? "Confirm that you gave the phone approval claimed for this collection. This does not record an outlet payment or move money."
+                : "Record why the claimed phone approval is disputed. The collection remains visible for investigation."}
+            </p>
+            <label className="grid gap-2 text-sm font-medium text-stone-800">
+              Review note
+              <textarea
+                name="note"
+                required
+                minLength={3}
+                maxLength={2000}
+                rows={4}
+                autoFocus
+                placeholder={combinedReviewAction.decision === "confirmed" ? "When and how you approved the exception" : "Why this approval claim is disputed"}
+                className="rounded-lg border border-stone-300 px-3 py-2.5 font-normal outline-none focus:border-amber-700 focus:ring-2 focus:ring-amber-200"
+              />
+            </label>
+            {combinedReviewError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{combinedReviewError}</p>}
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" disabled={busy} onClick={() => setCombinedReviewAction(null)} className="min-h-10 rounded-lg border border-stone-300 px-4 py-2 text-sm font-semibold hover:bg-stone-50 disabled:opacity-50">Cancel</button>
+              <FormSubmitButton type="submit" disabled={busy} className={`min-h-10 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${combinedReviewAction.decision === "confirmed" ? "bg-emerald-800 hover:bg-emerald-900" : "bg-red-700 hover:bg-red-800"}`}>
+                {busy ? "Saving review…" : combinedReviewAction.decision === "confirmed" ? "Confirm approval" : "Submit dispute"}
+              </FormSubmitButton>
+            </div>
           </form>
         )}
       </Modal>
@@ -1765,7 +1879,9 @@ export function FinancialHistoryPage() {
           <form onSubmit={submitVerification} className="grid gap-4">
             <p className="text-sm text-stone-600">
               {verificationAction.kind === "verify"
-                ? "Confirm that this payment appears in the bank or payment-provider record. A receipt will be issued only after confirmation."
+                ? combinedPayments.data?.some((item) => item.payment_id === verificationAction.payment.payment_id)
+                  ? "Confirm the full combined payment in the bank or provider record. No hotel-only receipt will be issued."
+                  : "Confirm that this payment appears in the bank or payment-provider record. A receipt will be issued only after confirmation."
                 : "Rejecting the claim will void the pending payment and retain the reason in the audit trail."}
             </p>
             <textarea
@@ -1779,7 +1895,7 @@ export function FinancialHistoryPage() {
               }
               className="rounded-lg border border-stone-300 px-3 py-2.5"
             />
-            <button
+            <FormSubmitButton
               disabled={busy}
               className={
                 verificationAction.kind === "verify"
@@ -1790,9 +1906,11 @@ export function FinancialHistoryPage() {
               {busy
                 ? "Saving…"
                 : verificationAction.kind === "verify"
-                  ? "Verify and issue receipt"
+                  ? combinedPayments.data?.some((item) => item.payment_id === verificationAction.payment.payment_id)
+                    ? "Verify combined payment"
+                    : "Verify and issue receipt"
                   : "Reject payment"}
-            </button>
+            </FormSubmitButton>
           </form>
         )}
       </Modal>
@@ -1890,7 +2008,7 @@ export function FinancialHistoryPage() {
                 Available for new collections
               </label>
             )}
-            <button
+            <FormSubmitButton
               disabled={busy}
               className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
             >
@@ -1899,7 +2017,7 @@ export function FinancialHistoryPage() {
                 : paymentMethodAction.kind === "create"
                   ? "Add payment method"
                   : "Save payment method"}
-            </button>
+            </FormSubmitButton>
           </form>
         )}
       </Modal>
@@ -1930,7 +2048,7 @@ export function FinancialHistoryPage() {
               }
               className="rounded-lg border border-stone-300 px-3 py-2.5"
             />
-            <button
+            <FormSubmitButton
               disabled={busy}
               className={
                 financeDecisionAction.approve
@@ -1943,7 +2061,7 @@ export function FinancialHistoryPage() {
                 : financeDecisionAction.approve
                   ? "Approve request"
                   : "Reject request"}
-            </button>
+            </FormSubmitButton>
           </form>
         )}
       </Modal>

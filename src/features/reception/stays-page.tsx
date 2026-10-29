@@ -1,3 +1,4 @@
+import { FormSubmitButton } from "@/components/shared/form-submit-button";
 import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { DoorOpen, Plus, Search, TriangleAlert } from "lucide-react";
@@ -481,12 +482,12 @@ export function StaysPage() {
               className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2.5"
             />
           </label>
-          <button
+          <FormSubmitButton
             disabled={busyId === "walk-in" || !selectedWalkInRoom}
             className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
           >
             {busyId === "walk-in" ? "Checking in…" : "Check in walk-in"}
-          </button>
+          </FormSubmitButton>
         </form>
       </Modal>
     </section>

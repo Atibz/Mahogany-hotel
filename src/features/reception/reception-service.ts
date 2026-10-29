@@ -2,6 +2,10 @@ import { supabase } from "@/lib/supabase/client";
 import { loadAllPages } from "@/lib/supabase/load-all-pages";
 
 export type Hotel = { id: string; trading_name: string };
+
+function singleRelation<T>(value: T | T[] | null | undefined): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value ?? null;
+}
 export type StayLifecyclePolicy = {
   hotel_id: string;
   standard_check_in_time: string | null;
@@ -155,6 +159,7 @@ export type Reservation = {
 };
 export type ReservationCancellationPolicySnapshot = {
   terms_state: "recorded_at_booking" | "unconfirmed_at_booking" | "legacy_terms_unknown";
+  scheduled_check_in_time?: string | null;
   free_cancellation_hours: number | null;
   late_cancellation_charge_nights: number | null;
   no_show_grace_hours: number | null;
@@ -163,6 +168,7 @@ export type ReservationCancellationPolicySnapshot = {
 };
 export type ReservationCancellationPolicy = {
   hotel_id: string;
+  standard_check_in_time?: string | null;
   free_cancellation_hours: number;
   late_cancellation_charge_nights: number;
   no_show_grace_hours: number;
@@ -267,6 +273,33 @@ export type FolioPaymentHistory = {
     reason: string;
     refunded_at: string;
   }[];
+  is_combined?: boolean;
+};
+
+export type CombinedPaymentCandidate = {
+  order_id: string;
+  order_number: string;
+  outlet_id: string;
+  outlet_name: string;
+  outlet_type: string;
+  balance_kobo: number;
+};
+
+export type CombinedGuestPayment = {
+  payment_id: string;
+  payment_number: string;
+  received_at: string;
+  status: string;
+  reference: string | null;
+  amount_kobo: number;
+  hotel_amount_kobo: number;
+  folio_id: string;
+  folio_number: string;
+  reason: string;
+  verbal_approver_name: string;
+  review_status: "awaiting_accountant" | "confirmed" | "disputed";
+  review_note: string | null;
+  orders: { order_id: string; order_number: string; outlet_name: string; amount_kobo: number; settled_kobo: number; settlements: { id: string; amount_kobo: number; evidence_reference: string; reversed: boolean }[] }[];
 };
 
 export type PendingPaymentVerification = {
@@ -292,7 +325,8 @@ export type FinanceApprovalRequest = {
     | "company_credit_note"
     | "company_payment_refund"
     | "pos_payment_refund"
-    | "pos_order_line_correction";
+    | "pos_order_line_correction"
+    | "combined_payment_refund";
   payload: Record<string, string | number | null>;
   target_entity_type: string;
   reason: string;
@@ -826,7 +860,10 @@ export async function getMaintenanceTickets(
     .eq("hotel_id", hotelId)
     .order("reported_at", { ascending: false });
   throwIfError(error);
-  return (data ?? []) as MaintenanceTicket[];
+  return (data ?? []).map((ticket) => ({
+    ...ticket,
+    rooms: singleRelation(ticket.rooms),
+  }));
 }
 
 export async function raiseMaintenanceTicket(
@@ -900,7 +937,7 @@ export async function getReservations(hotelId: string): Promise<Reservation[]> {
     const { data, error } = await client()
       .from("reservations")
       .select(
-        "id, reservation_number, status, room_type_id, room_id, check_in_date, check_out_date, agreed_rate_kobo, guests(full_name, email), rooms(room_number), room_types(name), reservation_cancellation_policy_snapshots(terms_state, free_cancellation_hours, late_cancellation_charge_nights, no_show_grace_hours, no_show_charge_nights, policy_notes)",
+        "id, reservation_number, status, room_type_id, room_id, check_in_date, check_out_date, agreed_rate_kobo, guests(full_name, email), rooms(room_number), room_types(name), reservation_cancellation_policy_snapshots(terms_state, scheduled_check_in_time, free_cancellation_hours, late_cancellation_charge_nights, no_show_grace_hours, no_show_charge_nights, policy_notes)",
       )
       .eq("hotel_id", hotelId)
       .order("check_in_date", { ascending: false })
@@ -928,7 +965,7 @@ export async function sendArrivalEmail(reservationId: string) {
 export async function getReservationCancellationPolicy(hotelId: string) {
   const { data, error } = await client()
     .from("hotel_settings")
-    .select("hotel_id, free_cancellation_hours, late_cancellation_charge_nights, no_show_grace_hours, no_show_charge_nights, cancellation_policy_notes, cancellation_policy_confirmed")
+    .select("hotel_id, standard_check_in_time, free_cancellation_hours, late_cancellation_charge_nights, no_show_grace_hours, no_show_charge_nights, cancellation_policy_notes, cancellation_policy_confirmed")
     .eq("hotel_id", hotelId)
     .single();
   throwIfError(error);
@@ -982,10 +1019,6 @@ export async function amendReservation(values: {
   checkInDate: string;
   checkOutDate: string;
   agreedRateKobo: number;
-  adultCount: number;
-  childCount: number;
-  source: string;
-  notes: string;
   reason: string;
 }) {
   const { error } = await client().rpc("amend_reservation", {
@@ -995,10 +1028,6 @@ export async function amendReservation(values: {
     arrival_date: values.checkInDate,
     departure_date: values.checkOutDate,
     agreed_rate: values.agreedRateKobo,
-    adult_count: values.adultCount,
-    child_count: values.childCount,
-    source: values.source,
-    reservation_notes: values.notes,
     amendment_reason: values.reason,
   });
   throwIfError(error);
@@ -1017,7 +1046,7 @@ export async function markReservationNoShow(
 
 export async function getFolios(hotelId: string): Promise<Folio[]> {
   type FolioRow = Omit<Folio, "balance_kobo" | "items"> & {
-    folio_items?: Folio["items"];
+    folio_items: Folio["items"];
   };
   const rows = await loadAllPages<FolioRow>(async (from, to) => {
     const { data, error } = await client()
@@ -1029,7 +1058,23 @@ export async function getFolios(hotelId: string): Promise<Folio[]> {
       .order("opened_at", { ascending: false })
       .order("id")
       .range(from, to);
-    return { data: (data ?? []) as FolioRow[], error };
+    return {
+      data: (data ?? []).map((folio): FolioRow => {
+        const stay = singleRelation(folio.stays);
+        return {
+          id: folio.id,
+          folio_number: folio.folio_number,
+          status: folio.status,
+          stays: stay ? {
+            id: stay.id,
+            guests: singleRelation(stay.guests),
+            rooms: singleRelation(stay.rooms),
+          } : null,
+          folio_items: folio.folio_items ?? [],
+        };
+      }),
+      error,
+    };
   });
   const folios = rows.map(
     ({ folio_items, ...folio }) => ({ ...folio, items: folio_items ?? [] }),
@@ -1047,9 +1092,37 @@ export async function getFolios(hotelId: string): Promise<Folio[]> {
     }),
   );
   const balances = new Map(balanceRows.flat().map((row) => [row.folio_id, Number(row.balance_kobo)]));
+  const contextRows = await Promise.all(
+    Array.from({ length: Math.ceil(folios.length / 200) }, (_, index) =>
+      folios.slice(index * 200, (index + 1) * 200).map((folio) => folio.id),
+    ).map(async (ids) => {
+      const { data, error } = await client().rpc("get_folio_context", {
+        target_hotel_id: hotelId,
+        target_folio_ids: ids,
+      });
+      throwIfError(error);
+      return (data ?? []) as {
+        folio_id: string;
+        stay_id: string;
+        guest_name: string;
+        room_number: string;
+      }[];
+    }),
+  );
+  const contexts = new Map(contextRows.flat().map((row) => [row.folio_id, row]));
   return folios.map((folio) => {
     if (!balances.has(folio.id)) throw new Error(`Balance unavailable for folio ${folio.folio_number}.`);
-    return { ...folio, balance_kobo: balances.get(folio.id)! };
+    const context = contexts.get(folio.id);
+    if (!context) throw new Error(`Guest context unavailable for folio ${folio.folio_number}.`);
+    return {
+      ...folio,
+      balance_kobo: balances.get(folio.id)!,
+      stays: {
+        id: context.stay_id,
+        guests: { full_name: context.guest_name },
+        rooms: { room_number: context.room_number },
+      },
+    };
   });
 }
 
@@ -1094,7 +1167,10 @@ export async function getFinanceApprovalRequests(
     .in("status", ["pending", "approved"])
     .order("requested_at");
   throwIfError(error);
-  return (data ?? []) as FinanceApprovalRequest[];
+  return (data ?? []).map((request) => ({
+    ...request,
+    profiles: singleRelation(request.profiles),
+  }));
 }
 
 export async function getFinanceApprovalRegister(
@@ -1318,7 +1394,7 @@ export async function getDashboardSnapshot(
   throwIfError(auditError);
   return {
     payments_today_kobo: (reconciliation ?? []).reduce(
-      (total, method) => total + Number(method.net_collected_kobo),
+      (total: number, method: { net_collected_kobo: number | string }) => total + Number(method.net_collected_kobo),
       0,
     ),
     recent_activity: (activity ?? []) as DashboardSnapshot["recent_activity"],
@@ -1379,6 +1455,84 @@ export async function getFolioPaymentHistory(
   });
   throwIfError(error);
   return (data ?? []) as FolioPaymentHistory[];
+}
+
+export async function getCombinedPaymentCandidates(folioId: string, orderNumbers: string[]): Promise<CombinedPaymentCandidate[]> {
+  const { data, error } = await client().rpc("get_combined_guest_payment_candidates", {
+    target_folio_id: folioId, requested_order_numbers: orderNumbers,
+  });
+  throwIfError(error);
+  return (data ?? []) as CombinedPaymentCandidate[];
+}
+
+export async function getCombinedGuestPayments(hotelId: string): Promise<CombinedGuestPayment[]> {
+  const { data, error } = await client().rpc("get_combined_guest_payments", { target_hotel_id: hotelId });
+  throwIfError(error);
+  return (data ?? []) as CombinedGuestPayment[];
+}
+
+export async function recordCombinedGuestPayment(values: {
+  folioId: string;
+  paymentMethodId: string;
+  hotelAmountKobo: number;
+  allocations: { order_id: string; amount_kobo: number }[];
+  reference: string;
+  accountantName: string;
+  reason: string;
+}): Promise<string> {
+  const { data, error } = await client().rpc("record_combined_guest_payment", {
+    target_folio_id: values.folioId,
+    target_payment_method_id: values.paymentMethodId,
+    hotel_amount_kobo: values.hotelAmountKobo,
+    outlet_allocations: values.allocations,
+    payment_reference: values.reference,
+    verbal_approver_name_value: values.accountantName,
+    exception_reason: values.reason,
+  });
+  throwIfError(error);
+  return data as string;
+}
+
+export async function reviewCombinedGuestPayment(paymentId: string, decision: "confirmed" | "disputed", note: string) {
+  const { error } = await client().rpc("review_combined_guest_payment", {
+    target_payment_id: paymentId, decision_value: decision, note_value: note,
+  });
+  throwIfError(error);
+}
+
+export async function recordCombinedGuestPaymentSettlement(values: {
+  paymentId: string;
+  orderId: string;
+  amountKobo: number;
+  evidenceReference: string;
+  note: string;
+}): Promise<string> {
+  const { data, error } = await client().rpc("record_combined_guest_payment_settlement", {
+    target_payment_id: values.paymentId,
+    target_order_id: values.orderId,
+    amount_value_kobo: values.amountKobo,
+    evidence_value: values.evidenceReference,
+    note_value: values.note,
+  });
+  throwIfError(error);
+  return data as string;
+}
+
+export async function reverseCombinedGuestPaymentSettlement(settlementId: string, evidenceReference: string, note: string): Promise<void> {
+  const { error } = await client().rpc("reverse_combined_guest_payment_settlement", {
+    target_settlement_id: settlementId,
+    evidence_value: evidenceReference,
+    note_value: note,
+  });
+  throwIfError(error);
+}
+
+export async function requestCombinedGuestPaymentRefund(paymentId: string, reason: string, reference: string) {
+  const { data, error } = await client().rpc("request_combined_guest_payment_refund", {
+    target_payment_id: paymentId, reason_value: reason, payout_reference: reference,
+  });
+  throwIfError(error);
+  return data as string;
 }
 
 export async function recordFolioPayment(values: {
@@ -1832,9 +1986,13 @@ export async function runNightAudit(hotelId: string) {
 export type CurrentNightAuditApproval = {
   business_date: string;
   approval_id: string | null;
+  approved_by: string | null;
   approved_by_name: string | null;
+  approved_by_role_name: string | null;
   approved_at: string | null;
+  executed_by: string | null;
   executed_by_name: string | null;
+  executed_by_role_name: string | null;
   executed_at: string | null;
   posting_status: string | null;
   posts_created: number | null;
