@@ -38,8 +38,8 @@ describe("role-protected route contracts", () => {
     expect(router).toMatch(routePattern);
   });
 
-  it("guards the dashboard route and renders a denial state for forbidden direct URLs", () => {
-    expect(router).toMatch(/index: true,\s*element: \(\s*<RequireFeature feature="dashboard">/);
+  it("routes the home page through role-aware access while guarding forbidden direct URLs", () => {
+    expect(router).toMatch(/index: true,\s*element: <RoleHomePage \/>/);
     expect(accessControl).toContain("return canAccess(feature) ? <>{children}</> : <AccessDeniedPage />");
   });
 });

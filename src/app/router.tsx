@@ -1,7 +1,7 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { DashboardPage } from "@/features/dashboard/dashboard-page";
+import { RoleHomePage } from "@/features/auth/role-home-page";
 import { SignInPage } from "@/features/auth/sign-in-page";
 import { SetPasswordPage } from "@/features/auth/set-password-page";
 import { ProfilePage } from "@/features/auth/profile-page";
@@ -44,11 +44,7 @@ export const router = createBrowserRouter([
         children: [
           {
             index: true,
-            element: (
-              <RequireFeature feature="dashboard">
-                <DashboardPage />
-              </RequireFeature>
-            ),
+            element: <RoleHomePage />,
           },
           {
             path: "rooms",

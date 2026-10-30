@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { canRoleAccess, type Feature, type RoleCode } from "./access-policy";
+import { canRoleAccess, getHomeDestination, type Feature, type RoleCode } from "./access-policy";
 
 const features: Feature[] = [
   "dashboard",
@@ -29,6 +29,14 @@ function visible(role: RoleCode) {
 }
 
 describe("role navigation policy", () => {
+  it("sends outlet-only staff home to their own POS instead of the restricted dashboard", () => {
+    expect(getHomeDestination(["restaurant_staff"])).toBe("/restaurant-pos");
+    expect(getHomeDestination(["bar_staff"])).toBe("/bar-pos");
+    expect(getHomeDestination(["restaurant_staff", "bar_staff"])).toBe("/restaurant-pos");
+    expect(getHomeDestination(["general_manager"])).toBeNull();
+    expect(getHomeDestination([])).toBeNull();
+  });
+
   it("gives the owner access to every registered feature", () => {
     expect(visible("owner")).toEqual(features);
   });

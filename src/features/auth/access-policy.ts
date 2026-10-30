@@ -63,3 +63,10 @@ export function canRoleAccess(roleCodes: RoleCode[], feature: Feature) {
     featureRoles[feature].some((role) => roleCodes.includes(role))
   );
 }
+
+export function getHomeDestination(roleCodes: RoleCode[]) {
+  if (canRoleAccess(roleCodes, "dashboard")) return null;
+  if (canRoleAccess(roleCodes, "posSales")) return "/restaurant-pos";
+  if (canRoleAccess(roleCodes, "barSales")) return "/bar-pos";
+  return null;
+}
