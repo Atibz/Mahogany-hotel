@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -48,7 +49,7 @@ export function MaintenancePage() {
     ticket: MaintenanceTicket;
     status: "in_progress" | "resolved";
   } | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useActionMessage<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");

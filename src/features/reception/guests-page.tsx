@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { GitMerge, Plus, Search, Users, X } from "lucide-react";
@@ -25,7 +26,7 @@ export function GuestsPage() {
   const guests = useGuests(hotel.data?.id);
   const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useActionMessage<string | null>(null);
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
   const [reasonAction, setReasonAction] = useState<{
     type: "deactivate" | "anonymise";

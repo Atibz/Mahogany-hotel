@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Clock3, Plus, Printer, Utensils, WalletCards } from "lucide-react";
@@ -12,6 +13,7 @@ import { printElementInIsolatedFrame } from "@/lib/print-document";
 import { supabase } from "@/lib/supabase/client";
 import { loadAllPages } from "@/lib/supabase/load-all-pages";
 import { mergeRecentAndOpenOrders } from "./order-workspace";
+import { expectedPosShiftCash, posActionErrorMessage } from "./shift-close";
 
 type Outlet = { id: string; name: string; code: string; department_code: string };
 type MenuItem = { id: string; outlet_id: string; category_id: string; name: string; code: string };
@@ -21,7 +23,7 @@ type ModifierGroup = { id: string; outlet_id: string; name: string; min_selectio
 type ModifierOption = { id: string; outlet_id: string; modifier_group_id: string; name: string; price_delta_kobo: number; display_order: number };
 type ModifierAssignment = { menu_item_id: string; modifier_group_id: string };
 type LineModifier = { id: string; order_line_id: string; group_name_snapshot: string; option_name_snapshot: string; price_delta_kobo: number };
-type Method = { id: string; name: string; code: string; requires_reference: boolean; requires_verification: boolean };
+type Method = { id: string; name: string; code: string; active: boolean; requires_reference: boolean; requires_verification: boolean };
 type Order = { id: string; outlet_id: string; order_number: string; business_date: string; service_mode: string; table_reference: string | null; guest_label: string | null; outlet_name_snapshot: string; department_code_snapshot: string; status: "open" | "settled" | "voided"; created_at: string };
 type Line = { id: string; order_id: string; item_name_snapshot: string; base_unit_price_kobo: number; unit_price_kobo: number; quantity: number; line_total_kobo: number };
 type Tender = { id: string; order_id: string; payment_number: string; payment_method_name_snapshot: string; amount_kobo: number; reference: string | null; status: "completed" | "pending_verification" | "voided"; received_at: string; verification_note: string | null };
@@ -30,7 +32,9 @@ type Receipt = { id: string; payment_id: string; receipt_number: string; order_n
 type Refund = { id: string; order_id: string; payment_id: string; refund_number: string; amount_kobo: number; payment_method_name_snapshot: string; reference: string | null; reason: string; refunded_at: string };
 type LineCorrection = { id: string; order_id: string; order_line_id: string; correction_number: string; line_name_snapshot: string; amount_delta_kobo: number; description: string; reason: string; corrected_at: string };
 type Shift = { id: string; outlet_id: string; shift_number: string; opening_float_kobo: number; opened_at: string };
-type Workspace = { date: string; userId: string; outlets: Outlet[]; categories: Category[]; items: MenuItem[]; prices: Price[]; modifierGroups: ModifierGroup[]; modifierOptions: ModifierOption[]; modifierAssignments: ModifierAssignment[]; lines: Line[]; lineModifiers: LineModifier[]; methods: Method[]; orders: Order[]; tenders: Tender[]; hotelCollections: HotelCollection[]; receipts: Receipt[]; shifts: Shift[]; refunds: Refund[]; corrections: LineCorrection[] };
+type ShiftCashPayment = { cashier_shift_id: string; payment_method_id: string; amount_kobo: number };
+type ShiftCashRefund = { cashier_shift_id: string; amount_kobo: number };
+type Workspace = { date: string; userId: string; outlets: Outlet[]; categories: Category[]; items: MenuItem[]; prices: Price[]; modifierGroups: ModifierGroup[]; modifierOptions: ModifierOption[]; modifierAssignments: ModifierAssignment[]; lines: Line[]; lineModifiers: LineModifier[]; methods: Method[]; cashMethodIds: string[]; orders: Order[]; tenders: Tender[]; hotelCollections: HotelCollection[]; receipts: Receipt[]; shifts: Shift[]; shiftCashPayments: ShiftCashPayment[]; shiftCashRefunds: ShiftCashRefund[]; refunds: Refund[]; corrections: LineCorrection[] };
 
 const field = "w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-amber-700 focus:ring-2 focus:ring-amber-100";
 const primary = "inline-flex items-center justify-center gap-2 rounded-xl bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-950 disabled:opacity-50";
@@ -67,11 +71,28 @@ async function loadWorkspace(hotelId: string, outletType: PosOutletType): Promis
     client.from("pos_modifier_groups").select("id,outlet_id,name,min_selections,max_selections,display_order").eq("hotel_id", hotelId).eq("active", true).order("display_order"),
     client.from("pos_modifier_options").select("id,outlet_id,modifier_group_id,name,price_delta_kobo,display_order").eq("hotel_id", hotelId).eq("active", true).order("display_order"),
     client.from("pos_menu_item_modifier_groups").select("menu_item_id,modifier_group_id").eq("hotel_id", hotelId).eq("active", true),
-    client.from("payment_methods").select("id,name,code,requires_reference,requires_verification").eq("hotel_id", hotelId).eq("active", true).order("display_order"),
+    client.from("payment_methods").select("id,name,code,active,requires_reference,requires_verification").eq("hotel_id", hotelId).order("display_order"),
     client.from("pos_cashier_shifts").select("id,outlet_id,shift_number,opening_float_kobo,opened_at").eq("hotel_id", hotelId).eq("opened_by", userId).eq("status", "open").order("opened_at", { ascending: false }),
   ]);
   const error = results.find((result) => result.error)?.error;
   if (error) throw error;
+  const shifts = (results[8].data ?? []) as Shift[];
+  const shiftIds = shifts.map((shift) => shift.id);
+  const [shiftCashPayments, shiftCashRefunds] = shiftIds.length ? await Promise.all([
+    loadAllPages<ShiftCashPayment>(async (from, to) => {
+      const { data, error: pageError } = await client.from("pos_order_payments")
+        .select("cashier_shift_id,payment_method_id,amount_kobo")
+        .in("cashier_shift_id", shiftIds).eq("status", "completed").order("id").range(from, to);
+      return { data: (data ?? []) as ShiftCashPayment[], error: pageError };
+    }),
+    loadAllPages<ShiftCashRefund>(async (from, to) => {
+      const { data, error: pageError } = await client.from("pos_order_refunds")
+        .select("cashier_shift_id,amount_kobo")
+        .in("cashier_shift_id", shiftIds).order("id").range(from, to);
+      return { data: (data ?? []) as ShiftCashRefund[], error: pageError };
+    }),
+  ]) : [[], []];
+  const allMethods = (results[7].data ?? []) as Method[];
   const outlets = (results[0].data ?? []) as Outlet[];
   const outletIds = new Set(outlets.map((outlet) => outlet.id));
   const [recentOrders, openOrders] = outletIds.size
@@ -132,9 +153,10 @@ async function loadWorkspace(hotelId: string, outletType: PosOutletType): Promis
     outlets, categories: (results[1].data ?? []) as Category[],
     items: (results[2].data ?? []) as MenuItem[], prices: (results[3].data ?? []) as Price[],
     modifierGroups: (results[4].data ?? []) as ModifierGroup[], modifierOptions: (results[5].data ?? []) as ModifierOption[],
-    modifierAssignments: (results[6].data ?? []) as ModifierAssignment[], methods: (results[7].data ?? []) as Method[],
+    modifierAssignments: (results[6].data ?? []) as ModifierAssignment[],
+    methods: allMethods.filter((method) => method.active), cashMethodIds: allMethods.filter((method) => method.code === "cash").map((method) => method.id),
     orders, lines, lineModifiers, tenders, hotelCollections, receipts,
-    shifts: (results[8].data ?? []) as Shift[], refunds, corrections,
+    shifts, shiftCashPayments, shiftCashRefunds, refunds, corrections,
   };
 }
 
@@ -159,8 +181,8 @@ export function RestaurantPosPage({ outletType = "restaurant" }: { outletType?: 
   const [correctionLine, setCorrectionLine] = useState<Line | null>(null);
   const [correctionDirection, setCorrectionDirection] = useState<"increase" | "decrease">("decrease");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [message, setMessage] = useActionMessage<string>("");
+  const [error, setError] = useActionMessage<string>("", "error");
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [voidOrderOpen, setVoidOrderOpen] = useState(false);
   const receiptRef = useRef<HTMLElement>(null);
@@ -191,6 +213,9 @@ export function RestaurantPosPage({ outletType = "restaurant" }: { outletType?: 
   const due = Math.max(gross - (collected - refunded) - pending - collectedByHotel - pendingAtHotel, 0);
   const credit = Math.max(collected - refunded + collectedByHotel - gross, 0);
   const shift = data?.shifts.find((record) => record.outlet_id === outlet?.id);
+  const shiftCash = shift && data
+    ? expectedPosShiftCash(shift, data.cashMethodIds, data.shiftCashPayments, data.shiftCashRefunds)
+    : null;
   const currentMethod = data?.methods.find((method) => method.id === methodId);
   const activeMenu = data?.items.filter((item) => item.outlet_id === outlet?.id) ?? [];
   const activePrices = useMemo(() => {
@@ -200,7 +225,7 @@ export function RestaurantPosPage({ outletType = "restaurant" }: { outletType?: 
   }, [data?.prices]);
 
   async function call(name: string, args: Record<string, unknown>, success: string) {
-    if (!supabase) return;
+    if (!supabase) { setError("Database connection is not configured."); return false; }
     setBusy(true); setError(""); setMessage("");
     try {
       const { error: rpcError } = await supabase.rpc(name, args as never);
@@ -209,7 +234,7 @@ export function RestaurantPosPage({ outletType = "restaurant" }: { outletType?: 
       setMessage(success);
       return true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The POS action could not be completed.");
+      setError(posActionErrorMessage(caught));
     } finally { setBusy(false); }
     return false;
   }
@@ -276,8 +301,14 @@ export function RestaurantPosPage({ outletType = "restaurant" }: { outletType?: 
   }
   function closeShift(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!shift) return;
-    try { void call("close_pos_cashier_shift", { target_shift_id: shift.id, declared_cash_value_kobo: nairaToKobo(declaredCash), variance_reason_value: reason }, `${departmentName} cash shift closed and reconciled.`).then((saved) => { if (saved) { setDeclaredCash(""); setReason(""); } }); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Enter a valid cash count."); }
+    try {
+      const declaredCashKobo = nairaToKobo(declaredCash);
+      if (shiftCash && declaredCashKobo !== shiftCash.expected && !reason.trim()) {
+        setError(`Your count differs from the expected ${formatNaira(shiftCash.expected)}. Enter a variance reason, or correct the cash count.`);
+        return;
+      }
+      void call("close_pos_cashier_shift", { target_shift_id: shift.id, declared_cash_value_kobo: declaredCashKobo, variance_reason_value: reason }, `${departmentName} cash shift closed and reconciled.`).then((saved) => { if (saved) { setDeclaredCash(""); setReason(""); } });
+    } catch (caught) { setError(posActionErrorMessage(caught)); }
   }
   function submitPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!selectedOrder || !currentMethod) return;
@@ -313,12 +344,13 @@ export function RestaurantPosPage({ outletType = "restaurant" }: { outletType?: 
     try {
       const magnitude = nairaToKobo(String(form.get("amount")));
       const delta = correctionDirection === "increase" ? magnitude : -magnitude;
+      const description = `${correctionDirection === "increase" ? "Increase" : "Decrease"} ${correctionLine.item_name_snapshot} sale amount by ${formatNaira(magnitude)}`;
       void call("request_pos_order_line_correction", {
         target_order_id: selectedOrder.id,
         target_order_line_id: correctionLine.id,
         amount_delta_value_kobo: delta,
-        description_value: String(form.get("description") ?? ""),
-        reason_value: String(form.get("reason") ?? ""),
+        description_value: description,
+        reason_value: String(form.get("explanation") ?? "").trim(),
       }, "Line correction submitted for independent GM approval. The original order and receipt are unchanged.").then((saved) => {
         if (saved) setCorrectionLine(null);
       });
@@ -363,7 +395,7 @@ export function RestaurantPosPage({ outletType = "restaurant" }: { outletType?: 
         <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">Recent {departmentName.toLowerCase()} orders</h2><p className="text-xs text-stone-500">Order history is separated from the hotel folio and payment ledgers.</p></div><select className={`${field} max-w-sm`} value={selectedOrder?.id ?? ""} onChange={(event) => setSelectedOrderId(event.target.value)}><option value="">Select an order</option>{orders.map((record) => <option key={record.id} value={record.id}>{record.order_number} · {record.status} · {record.guest_label || record.service_mode}</option>)}</select></div></section>
         {selectedOrder && <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-amber-800">{selectedOrder.order_number} · {selectedOrder.business_date}</p><h2 className="mt-1 text-lg font-semibold">{selectedOrder.outlet_name_snapshot} <span className="text-sm font-normal text-stone-500">· {selectedOrder.department_code_snapshot}</span></h2><p className="text-sm text-stone-500">{selectedOrder.service_mode.replace("_", " ")}{selectedOrder.table_reference ? ` · ${selectedOrder.table_reference}` : ""}{selectedOrder.guest_label ? ` · ${selectedOrder.guest_label}` : ""}</p></div><span className={`rounded-full px-3 py-1 text-xs font-semibold ${selectedOrder.status === "settled" ? "bg-emerald-100 text-emerald-800" : selectedOrder.status === "voided" ? "bg-stone-100 text-stone-600" : "bg-amber-100 text-amber-900"}`}>{selectedOrder.status}</span></div>
           <div className="mt-4 divide-y divide-stone-100">{lines.map((line) => { const options = lineModifiers.filter((modifier) => modifier.order_line_id === line.id); const corrections = orderCorrections.filter((correction) => correction.order_line_id === line.id); const lineDelta = corrections.reduce((sum, correction) => sum + Number(correction.amount_delta_kobo), 0); return <div key={line.id} className="flex items-start justify-between gap-3 py-3 text-sm"><div><p className="font-medium">{line.quantity} × {line.item_name_snapshot}</p><p className="mt-0.5 text-xs text-stone-500">Base {formatNaira(line.base_unit_price_kobo)} per item{options.length ? ` · with ${options.length} selected ${options.length === 1 ? "option" : "options"}` : ""}</p>{options.length > 0 && <ul className="mt-1 space-y-0.5 text-xs text-stone-600">{options.map((option) => <li key={option.id}>{option.group_name_snapshot}: {option.option_name_snapshot} {option.price_delta_kobo === 0 ? "· included" : `· ${option.price_delta_kobo > 0 ? "+" : "−"}${formatNaira(Math.abs(option.price_delta_kobo))} per item`}</li>)}</ul>}{lineDelta !== 0 && <p className="mt-1 text-xs font-semibold text-amber-900">Approved corrections: {lineDelta > 0 ? "+" : "−"}{formatNaira(Math.abs(lineDelta))}</p>}{canRequestCorrection && collected > 0 && selectedOrder.status !== "voided" && <button type="button" className="mt-1 text-xs font-semibold text-amber-900 underline" onClick={() => { setCorrectionDirection("decrease"); setCorrectionLine(line); }}>Request line correction</button>}</div><b className="shrink-0">{formatNaira(line.line_total_kobo)}</b></div>; })}{lines.length === 0 && <p className="py-3 text-sm text-stone-500">Add items from the menu above.</p>}</div>
-          {orderCorrections.length > 0 && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><h3 className="text-xs font-semibold text-amber-950">Approved line corrections</h3><ul className="mt-2 space-y-2">{orderCorrections.map((correction) => <li key={correction.id} className="text-xs text-amber-950"><b>{correction.correction_number}</b> · {correction.line_name_snapshot} · {Number(correction.amount_delta_kobo) > 0 ? "+" : "−"}{formatNaira(Math.abs(Number(correction.amount_delta_kobo)))} · {correction.description}<span className="block text-stone-600">Reason: {correction.reason}</span></li>)}</ul></div>}
+          {orderCorrections.length > 0 && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><h3 className="text-xs font-semibold text-amber-950">Approved line corrections</h3><ul className="mt-2 space-y-2">{orderCorrections.map((correction) => <li key={correction.id} className="text-xs text-amber-950"><b>{correction.correction_number}</b> · {correction.line_name_snapshot} · {Number(correction.amount_delta_kobo) > 0 ? "+" : "−"}{formatNaira(Math.abs(Number(correction.amount_delta_kobo)))}<span className="block text-stone-600">Explanation: {correction.reason}</span></li>)}</ul></div>}
           <dl className="mt-4 grid gap-2 rounded-xl bg-stone-50 p-3 text-sm sm:grid-cols-2 lg:grid-cols-5"><div><dt className="text-stone-500">Adjusted order total</dt><dd className="font-semibold">{formatNaira(gross)}</dd></div><div><dt className="text-stone-500">Collected by outlet</dt><dd className="font-semibold">{formatNaira(collected - refunded)}</dd></div><div><dt className="text-stone-500">Collected by hotel on behalf of outlet</dt><dd className="font-semibold">{formatNaira(collectedByHotel)}</dd></div><div><dt className="text-stone-500">Still due {(pending + pendingAtHotel) > 0 && `· ${formatNaira(pending + pendingAtHotel)} pending`}</dt><dd className="font-semibold">{formatNaira(due)}</dd></div><div><dt className="text-stone-500">Customer credit</dt><dd className="font-semibold">{formatNaira(credit)}{credit > 0 && <span className="block text-xs font-normal text-stone-600">Payout needs separate refund approval</span>}</dd></div></dl>
           {hotelCollections.length > 0 && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs"><p className="font-semibold">Exceptional hotel-side collection</p>{hotelCollections.map((collection) => <p key={collection.payment_number}>{collection.payment_number} · {formatNaira(Number(collection.amount_kobo))} · {collection.status.replaceAll("_", " ")}. This is not an outlet tender or outlet receipt.</p>)}</div>}
           {canSell && selectedOrder.status === "open" && <><form onSubmit={submitPayment} className="mt-4 grid gap-3 sm:grid-cols-2"><label className="text-xs font-medium text-stone-600">Payment method<select required className={`${field} mt-1`} value={methodId} onChange={(event) => setMethodId(event.target.value)}><option value="">Choose a method</option>{data.methods.map((method) => <option key={method.id} value={method.id}>{method.name}{method.requires_verification ? " · requires verification" : ""}</option>)}</select></label><label className="text-xs font-medium text-stone-600">Amount (₦)<input required className={`${field} mt-1`} type="number" min="0.01" step="0.01" max={due / 100} value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} /></label>{currentMethod?.requires_reference && <label className="text-xs font-medium text-stone-600 sm:col-span-2">Transfer/reference number<input required className={`${field} mt-1`} value={reference} onChange={(event) => setReference(event.target.value)} /></label>}<FormSubmitButton className={`${primary} sm:col-span-2`} disabled={busy || due <= 0 || !methodId}>Record {departmentName.toLowerCase()} payment</FormSubmitButton></form><p className="mt-2 text-xs leading-5 text-stone-500">Cash requires your {departmentName.toLowerCase()} cash shift to be open. Methods requiring verification remain pending and do not issue a receipt until independently reviewed.</p>{collected === 0 && pending === 0 && <button type="button" onClick={() => setVoidOrderOpen(true)} className="mt-3 rounded-xl border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-800">Void unpaid order</button>}</>}
@@ -371,6 +403,11 @@ export function RestaurantPosPage({ outletType = "restaurant" }: { outletType?: 
         </section>}
       </div>
       <aside className="space-y-5">
+        {canSell && shiftCash && <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
+          <p className="font-semibold">Expected cash for this {departmentName.toLowerCase()} shift: {formatNaira(shiftCash.expected)}</p>
+          <p className="mt-1">Opening float {formatNaira(shiftCash.opening)} + completed cash received {formatNaira(shiftCash.received)} − cash refunds {formatNaira(shiftCash.returned)}.</p>
+          <p className="mt-2 text-xs leading-5">Count the physical cash in this outlet’s till at handover. Enter the amount actually counted below. If it differs, explain the variance; card, transfer, and hotel-side collections are not included.</p>
+        </div>}
         {canSell && <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5"><div className="flex items-center gap-2"><WalletCards className="size-5 text-amber-900"/><h2 className="font-semibold">{departmentName} cash shift</h2></div>{shift ? <><p className="mt-2 text-sm text-stone-600"><Clock3 className="mr-1 inline size-4"/>{shift.shift_number} · opened {new Date(shift.opened_at).toLocaleTimeString("en-NG")}</p><form onSubmit={closeShift} className="mt-3 space-y-3"><label className="block text-xs font-medium text-stone-600">Declared cash count (₦)<input required type="number" min="0" step="0.01" className={`${field} mt-1`} value={declaredCash} onChange={(event) => setDeclaredCash(event.target.value)}/></label><label className="block text-xs font-medium text-stone-600">Variance reason (if needed)<textarea name="reason" className={`${field} mt-1`} rows={2} value={reason} onChange={(event) => setReason(event.target.value)} /></label><FormSubmitButton className="rounded-xl border border-stone-300 px-4 py-2 text-sm font-semibold" disabled={busy}>Close and reconcile {departmentName.toLowerCase()} shift</FormSubmitButton></form></> : <form onSubmit={openShift} className="mt-3 space-y-3"><p className="text-sm text-stone-600">Open a separately tracked float before accepting {departmentName.toLowerCase()} cash. This shift does not join hotel front-desk cash.</p><label className="block text-xs font-medium text-stone-600">Opening float (₦)<input required type="number" min="0" step="0.01" className={`${field} mt-1`} value={openingFloat} onChange={(event) => setOpeningFloat(event.target.value)}/></label><FormSubmitButton className={primary} disabled={busy}>Open {departmentName.toLowerCase()} cash shift</FormSubmitButton></form>}</section>}
         <SalesReport hotelId={hotel.data.id} date={data.date} outletType={outletType} departmentName={departmentName}/>
       </aside>
@@ -378,7 +415,7 @@ export function RestaurantPosPage({ outletType = "restaurant" }: { outletType?: 
     {receipt && <Modal open title={`${receipt.department_code_snapshot === "bar" ? "Bar" : "Restaurant"} POS payment record`} onClose={() => setReceipt(null)}><article ref={receiptRef} className="receipt space-y-4 text-sm text-stone-900"><header className="border-b border-stone-300 pb-3"><p className="text-xl font-bold">{receipt.outlet_name_snapshot}</p><p className="muted mt-1">Department: {receipt.department_code_snapshot}</p><p className="muted">Internal POS payment acknowledgement</p></header><dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2"><dt className="muted">Record</dt><dd>{receipt.receipt_number}</dd><dt className="muted">Order</dt><dd>{receipt.order_number_snapshot}</dd><dt className="muted">Issued</dt><dd>{new Date(receipt.issued_at).toLocaleString("en-NG")}</dd><dt className="muted">Method</dt><dd>{receipt.payment_method_name_snapshot}</dd>{receipt.reference && <><dt className="muted">Reference</dt><dd>{receipt.reference}</dd></>}</dl><p className="total">Amount: {formatNaira(receipt.amount_kobo)}</p><p className="muted text-xs">Internal record only. Not a tax invoice or statutory receipt; use the approved {receipt.department_code_snapshot === "bar" ? "bar" : "restaurant"} POS document for tax reporting.</p></article><div className="mt-5 flex justify-end"><button type="button" className={primary} onClick={() => printReceipt(receipt)}><Printer className="size-4"/>Print internal record</button></div></Modal>}
     {voidOrderOpen && selectedOrder && <Modal open title={`Void unpaid ${departmentName.toLowerCase()} order`} onClose={() => { if (!busy) setVoidOrderOpen(false); }}><form onSubmit={submitVoid} className="space-y-4"><p className="text-sm text-stone-600">This order has no completed or pending payments. The order is retained as a voided record; it will not be deleted.</p><label className="block text-sm font-medium">Reason<textarea name="voidReason" required minLength={3} maxLength={500} className={`${field} mt-2`} rows={3}/></label><div className="flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => setVoidOrderOpen(false)} className="rounded-xl border border-stone-300 px-4 py-2.5 text-sm">Cancel</button><FormSubmitButton className="rounded-xl bg-rose-700 px-4 py-2.5 text-sm font-semibold text-white" disabled={busy}>Void order</FormSubmitButton></div></form></Modal>}
     {modifierItem && <Modal open title={`Customize ${modifierItem.name}`} onClose={() => { if (!busy) { setModifierItem(null); setModifierSelection({}); } }}><form onSubmit={submitConfiguredItem} className="space-y-4"><p className="text-sm text-stone-600">Choose the available options. Required selections are marked; prices are added per item.</p>{configuredGroups.map((group) => { const options = data.modifierOptions.filter((option) => option.modifier_group_id === group.id); const selected = modifierSelection[group.id] ?? []; return <fieldset key={group.id} className="rounded-xl border border-stone-200 p-3"><legend className="px-1 text-sm font-semibold">{group.name}<span className="ml-2 text-xs font-normal text-stone-500">{group.min_selections > 0 ? `Required · choose ${group.min_selections}${group.max_selections > group.min_selections ? `–${group.max_selections}` : ""}` : `Optional · choose up to ${group.max_selections}`}</span></legend>{options.length ? <div className="mt-1 space-y-1">{options.map((option) => <label key={option.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm hover:bg-stone-50"><input type="checkbox" checked={selected.includes(option.id)} disabled={!selected.includes(option.id) && selected.length >= group.max_selections} onChange={() => toggleModifier(group, option.id)} className="size-4 accent-amber-800" /><span className="flex-1">{option.name}</span><span className="text-xs text-stone-600">{option.price_delta_kobo === 0 ? "Included" : `${option.price_delta_kobo > 0 ? "+" : "−"}${formatNaira(Math.abs(option.price_delta_kobo))} / item`}</span></label>)}</div> : <p className="mt-2 text-sm text-red-700">No active options are configured for this group.</p>}</fieldset>; })}<div className="flex items-center justify-between rounded-xl bg-stone-50 p-3 text-sm"><span>Estimated line total · {quantity} item{quantity === 1 ? "" : "s"}</span><b>{formatNaira((modifierBasePrice + selectedModifierTotal) * quantity)}</b></div><div className="flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => { setModifierItem(null); setModifierSelection({}); }} className="rounded-xl border border-stone-300 px-4 py-2.5 text-sm">Cancel</button><FormSubmitButton type="submit" disabled={busy || !modifierSelectionValid || modifierBasePrice + selectedModifierTotal <= 0} className={primary}>{busy ? "Adding…" : "Add to order"}</FormSubmitButton></div></form></Modal>}
-    {correctionLine && selectedOrder && <Modal open title={`Correct paid line · ${correctionLine.item_name_snapshot}`} onClose={() => { if (!busy) setCorrectionLine(null); }}><form onSubmit={submitLineCorrection} className="space-y-4"><p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-950">The original order, line, payment, and receipt will remain unchanged. A GM must independently approve this correction. An increase becomes due; a decrease creates customer credit and does not itself issue a payout.</p><label className="block text-sm font-medium">Correction direction<select className={`${field} mt-1`} value={correctionDirection} onChange={(event) => setCorrectionDirection(event.target.value as "increase" | "decrease")}><option value="decrease">Decrease the sale amount</option><option value="increase">Increase the sale amount</option></select></label><label className="block text-sm font-medium">Amount (₦)<input name="amount" required type="number" min="0.01" step="0.01" className={`${field} mt-1`} /></label><label className="block text-sm font-medium">What line detail is being corrected?<input name="description" required minLength={3} maxLength={200} className={`${field} mt-1`} placeholder="e.g. Correct quantity from 3 to 2" /></label><label className="block text-sm font-medium">Reason<textarea name="reason" required minLength={3} maxLength={500} rows={3} className={`${field} mt-1`} placeholder="Explain why this correction is needed" /></label><div className="flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => setCorrectionLine(null)} className="rounded-xl border border-stone-300 px-4 py-2.5 text-sm">Cancel</button><FormSubmitButton type="submit" disabled={busy} className={primary}>{busy ? "Sending…" : "Send for GM approval"}</FormSubmitButton></div></form></Modal>}
+    {correctionLine && selectedOrder && <Modal open title={`Correct paid line · ${correctionLine.item_name_snapshot}`} onClose={() => { if (!busy) setCorrectionLine(null); }}><form onSubmit={submitLineCorrection} className="space-y-4"><p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-950">The original order, line, payment, and receipt will remain unchanged. A GM must independently approve this correction. An increase becomes due; a decrease creates customer credit and does not itself issue a payout.</p><label className="block text-sm font-medium">Correction direction<select className={`${field} mt-1`} value={correctionDirection} onChange={(event) => setCorrectionDirection(event.target.value as "increase" | "decrease")}><option value="decrease">Decrease the sale amount</option><option value="increase">Increase the sale amount</option></select></label><label className="block text-sm font-medium">Amount (₦)<input name="amount" required type="number" min="0.01" step="0.01" className={`${field} mt-1`} /></label><label className="block text-sm font-medium">What is being corrected, and why?<textarea name="explanation" required minLength={3} maxLength={500} rows={3} className={`${field} mt-1`} placeholder="e.g. One meal was entered twice; reduce the charge from 3 meals to 2" /></label><div className="flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => setCorrectionLine(null)} className="rounded-xl border border-stone-300 px-4 py-2.5 text-sm">Cancel</button><FormSubmitButton type="submit" disabled={busy} className={primary}>{busy ? "Sending…" : "Send for GM approval"}</FormSubmitButton></div></form></Modal>}
     {refundTender && <Modal open title={`Request refund · ${refundTender.payment_number}`} onClose={() => { if (!busy) { setRefundTender(null); setRefundMethodId(""); } }}><form onSubmit={submitRefundRequest} className="space-y-4"><p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-950">Refunds do not alter the original payment or receipt. The request must be approved by someone else before it can be recorded. No money is sent by this app.</p><label className="block text-sm font-medium">Amount (₦)<input name="amount" required type="number" min="0.01" step="0.01" max={Math.min(Number(refundTender.amount_kobo) - (data.refunds.filter((item) => item.payment_id === refundTender.id).reduce((sum, item) => sum + Number(item.amount_kobo), 0)), credit) / 100} className={`${field} mt-1`} /></label><p className="-mt-2 text-xs text-stone-500">Maximum based on this payment and current customer credit: {formatNaira(Math.min(Number(refundTender.amount_kobo) - (data.refunds.filter((item) => item.payment_id === refundTender.id).reduce((sum, item) => sum + Number(item.amount_kobo), 0)), credit))}.</p><label className="block text-sm font-medium">Refund method<select required value={refundMethodId} onChange={(event) => setRefundMethodId(event.target.value)} className={`${field} mt-1`}><option value="">Choose method</option>{data.methods.map((method) => <option key={method.id} value={method.id}>{method.name}</option>)}</select></label><label className="block text-sm font-medium">Reference {data.methods.find((method) => method.id === refundMethodId)?.code !== "cash" && <span className="text-rose-700">· required for non-cash</span>}<input name="reference" required={Boolean(refundMethodId && data.methods.find((method) => method.id === refundMethodId)?.code !== "cash")} maxLength={120} className={`${field} mt-1`} placeholder="Bank/POS transaction reference" /></label><label className="block text-sm font-medium">Reason<textarea name="reason" required minLength={3} maxLength={500} rows={3} className={`${field} mt-1`} /></label><div className="flex justify-end gap-2"><button type="button" disabled={busy} onClick={() => setRefundTender(null)} className="rounded-xl border border-stone-300 px-4 py-2.5 text-sm">Cancel</button><FormSubmitButton type="submit" disabled={busy || !refundMethodId} className={primary}>{busy ? "Sending…" : "Send for approval"}</FormSubmitButton></div></form></Modal>}
   </section>;
 }

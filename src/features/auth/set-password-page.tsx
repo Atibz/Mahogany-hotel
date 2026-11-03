@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { Eye, EyeOff, LoaderCircle } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
@@ -16,7 +17,7 @@ export function SetPasswordPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
-  const [message, setMessage] = useState<string | null>(() => flow ? null : 'This account link is invalid. Request a fresh link from the sign-in page or ask your manager to resend the invitation.')
+  const [message, setMessage] = useActionMessage<string | null>(() => flow ? null : 'This account link is invalid. Request a fresh link from the sign-in page or ask your manager to resend the invitation.')
   const [isCheckingLink, setIsCheckingLink] = useState(Boolean(flow && supabase))
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -39,7 +40,7 @@ export function SetPasswordPage() {
       setEmail(sessionEmail)
     })
     return () => { isCurrent = false }
-  }, [flow])
+  }, [flow, setMessage])
 
   if (!isSupabaseConfigured) return <Navigate to="/setup" replace />
 

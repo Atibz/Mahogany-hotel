@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatNaira, nairaToKobo } from "@/lib/money";
@@ -41,7 +42,7 @@ export function CombinedPaymentPanel({ hotelId, folioId, folioBalanceKobo, metho
   const [reason, setReason] = useState("");
   const [phoneApproved, setPhoneApproved] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useActionMessage<string>("");
   const [reviewAction, setReviewAction] = useState<{ paymentId: string; paymentNumber: string; decision: "confirmed" | "disputed" } | null>(null);
   const [reviewNote, setReviewNote] = useState("");
   const [printRecord, setPrintRecord] = useState<CombinedGuestPayment | null>(null);

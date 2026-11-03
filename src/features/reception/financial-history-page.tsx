@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -512,11 +513,11 @@ export function FinancialHistoryPage() {
     useState<FinanceDecisionAction | null>(null);
   const [combinedReviewAction, setCombinedReviewAction] =
     useState<CombinedReviewAction | null>(null);
-  const [combinedReviewError, setCombinedReviewError] = useState<string | null>(null);
-  const [combinedReviewMessage, setCombinedReviewMessage] = useState<string | null>(null);
+  const [combinedReviewError, setCombinedReviewError] = useActionMessage<string | null>(null, "error");
+  const [combinedReviewMessage, setCombinedReviewMessage] = useActionMessage<string | null>(null);
   const [approvalSearch, setApprovalSearch] = useState("");
   const [approvalStatus, setApprovalStatus] = useState("all");
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useActionMessage<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [financeView, setFinanceView] = useState<FinanceView>("overview");
   const selected = folios.data?.find((folio) => folio.id === folioId);

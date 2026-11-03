@@ -31,6 +31,7 @@ import { NotificationCenter } from "@/components/layout/notification-center";
 import { useActiveHotel } from "@/features/reception/use-reception";
 import { useHotelRealtime } from "@/features/reception/use-hotel-realtime";
 import { HelpCenter } from "@/components/layout/help-center";
+import { useActionMessage } from "@/components/shared/action-feedback";
 
 const navigation = [
   {
@@ -185,6 +186,7 @@ export function AppShell() {
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [, setSignOutError] = useActionMessage<string | null>(null, "error");
   const closeHelp = useCallback(() => setIsHelpOpen(false), []);
   const { canAccess, roleCodes } = useAccess();
   const hotel = useActiveHotel();
@@ -205,7 +207,16 @@ export function AppShell() {
   }, [location.pathname]);
 
   async function handleSignOut() {
-    await supabase?.auth.signOut();
+    if (!supabase) {
+      setSignOutError("Sign out is unavailable. Please try again shortly.");
+      return;
+    }
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) setSignOutError(`Could not sign out: ${error.message}`);
+    } catch (error) {
+      setSignOutError(error instanceof Error ? `Could not sign out: ${error.message}` : "Could not sign out. Please try again.");
+    }
   }
 
   return (

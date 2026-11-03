@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 
@@ -43,8 +44,8 @@ export function DeparturesPage() {
   const [checklist, setChecklist] = useState(emptyChecklist);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [modalMessage, setModalMessage] = useState<string | null>(null);
+  const [message, setMessage] = useActionMessage<string | null>(null);
+  const [modalMessage, setModalMessage] = useActionMessage<string | null>(null);
   const [preparedStayId, setPreparedStayId] = useState<string | null>(null);
   const [invoice, setInvoice] = useState<CheckoutInvoice | null>(null);
   const invoiceDocumentRef = useRef<HTMLDivElement>(null);

@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -92,7 +93,7 @@ export function RoomsPage() {
   const [editingType, setEditingType] = useState<RoomType | null>(null);
   const [photoTarget, setPhotoTarget] = useState<PhotoTarget | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
-  const [photoMessage, setPhotoMessage] = useState<string | null>(null);
+  const [photoMessage, setPhotoMessage] = useActionMessage<string | null>(null);
   const [blockTarget, setBlockTarget] = useState<RoomBoardItem | null>(null);
   const [turnoverTarget, setTurnoverTarget] = useState<RoomBoardItem | null>(
     null,
@@ -105,7 +106,7 @@ export function RoomsPage() {
     useState<InHouseRoomOccupant | null>(null);
   const [extensionTarget, setExtensionTarget] =
     useState<InHouseRoomOccupant | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useActionMessage<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showInventorySetup, setShowInventorySetup] = useState(false);
   const [roomSearch, setRoomSearch] = useState("");

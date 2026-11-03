@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { formatNaira, nairaToKobo } from "@/lib/money";
@@ -13,7 +14,7 @@ export function CombinedOutletSettlement({ payment, onChanged }: {
   const [evidence, setEvidence] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useActionMessage<string>("");
   const [reversalId, setReversalId] = useState("");
   const [reversalEvidence, setReversalEvidence] = useState("");
   const [reversalNote, setReversalNote] = useState("");

@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useRef, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { BookOpen, CircleDollarSign, Moon, Search } from "lucide-react";
@@ -56,7 +57,7 @@ export function FoliosPage() {
   const [reference, setReference] = useState("");
   const [action, setAction] = useState<Action | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useActionMessage<string | null>(null);
   const [search, setSearch] = useState("");
   const [folioFilter, setFolioFilter] = useState<
     "all" | "open" | "balance" | "settled"

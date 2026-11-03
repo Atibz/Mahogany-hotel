@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { KeyRound, LoaderCircle, ShieldCheck } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -14,7 +15,7 @@ const roleLabels: Record<string, string> = { owner: 'Owner', general_manager: 'G
 export function ProfilePage() {
   const navigate = useNavigate()
   const { session } = useAuth(); const hotel = useActiveHotel(); const { roleCodes, isLoading: isAccessLoading } = useAccess()
-  const [isPasswordOpen, setIsPasswordOpen] = useState(false); const [oldPassword, setOldPassword] = useState(''); const [password, setPassword] = useState(''); const [confirmation, setConfirmation] = useState(''); const [message, setMessage] = useState<string | null>(null); const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPasswordOpen, setIsPasswordOpen] = useState(false); const [oldPassword, setOldPassword] = useState(''); const [password, setPassword] = useState(''); const [confirmation, setConfirmation] = useState(''); const [message, setMessage] = useActionMessage<string | null>(null); const [isSubmitting, setIsSubmitting] = useState(false)
   const fullName = typeof session?.user.user_metadata.full_name === 'string' ? session.user.user_metadata.full_name : 'Staff member'
   function closePasswordDialog() { if (isSubmitting) return; setIsPasswordOpen(false); setOldPassword(''); setPassword(''); setConfirmation(''); setMessage(null) }
   async function changePassword(event: FormEvent<HTMLFormElement>) {

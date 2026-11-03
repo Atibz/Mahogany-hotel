@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useMemo, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeftRight, Box, PackagePlus, Plus, Truck, TriangleAlert } from "lucide-react";
@@ -32,7 +33,7 @@ export function InventoryPage() {
   const [showMovement, setShowMovement] = useState(false);
   const [movementType, setMovementType] = useState("receipt");
   const [sourceLocation, setSourceLocation] = useState("main_store");
-  const [notice, setNotice] = useState<{ message: string; error?: boolean } | null>(null);
+  const [notice, setNotice] = useActionMessage<{ message: string; error?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const hotelId = hotel.data?.id;
   const canManage = access.roleCodes.some((role) => ["owner", "general_manager", "storekeeper"].includes(role));

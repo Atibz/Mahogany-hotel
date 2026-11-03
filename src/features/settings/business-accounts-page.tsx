@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, CheckCircle2, Clock3, Download, FileText, ShieldCheck } from "lucide-react";
@@ -87,7 +88,7 @@ export function BusinessAccountsPage() {
   const methods = usePaymentMethods(hotel.data?.id);
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useActionMessage<string | null>(null);
   const [settlementTarget, setSettlementTarget] = useState<BusinessReceivable | null>(null);
   const [reviewTarget, setReviewTarget] = useState<ReceivablePayment | null>(null);
   const [statementAccountId, setStatementAccountId] = useState("");

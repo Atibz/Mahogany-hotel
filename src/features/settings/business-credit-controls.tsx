@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -64,7 +65,7 @@ export function BusinessCreditControls({ hotelId, hotelName, roleCodes, receivab
   const [action, setAction] = useState<"credit" | "refund" | null>(null);
   const [note, setNote] = useState<CreditNote | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useActionMessage<string | null>(null);
   const [selectedReceivableId, setSelectedReceivableId] = useState("");
   const canRequestCredit = roleCodes.some((role) => ["owner", "general_manager", "accountant"].includes(role));
   const canRequestRefund = roleCodes.some((role) => ["owner", "accountant"].includes(role));

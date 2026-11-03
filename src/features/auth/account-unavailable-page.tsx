@@ -1,10 +1,21 @@
 import { LogOut, ShieldAlert } from 'lucide-react'
+import { useActionMessage } from '@/components/shared/action-feedback'
 
 import { supabase } from '@/lib/supabase/client'
 
 export function AccountUnavailablePage() {
+  const [, setSignOutError] = useActionMessage<string | null>(null, 'error')
   async function handleSignOut() {
-    await supabase?.auth.signOut()
+    if (!supabase) {
+      setSignOutError('Sign out is unavailable. Please try again shortly.')
+      return
+    }
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) setSignOutError(`Could not sign out: ${error.message}`)
+    } catch (error) {
+      setSignOutError(error instanceof Error ? `Could not sign out: ${error.message}` : 'Could not sign out. Please try again.')
+    }
   }
 
   return (

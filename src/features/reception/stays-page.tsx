@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { DoorOpen, Plus, Search, TriangleAlert } from "lucide-react";
@@ -32,7 +33,7 @@ export function StaysPage() {
   const reservations = useReservations(hotel.data?.id);
   const rooms = useRoomBoard(hotel.data?.id);
   const queryClient = useQueryClient();
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useActionMessage<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [isWalkInOpen, setIsWalkInOpen] = useState(false);
   const [walkInRoomId, setWalkInRoomId] = useState("");

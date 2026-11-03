@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock3, ShieldCheck } from "lucide-react";
@@ -19,7 +20,7 @@ export function StayPolicyPage() {
   const hotel = useActiveHotel();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useActionMessage<string | null>(null);
   const policy = useQuery({
     queryKey: ["stay-lifecycle-policy", hotel.data?.id],
     queryFn: () => getStayLifecyclePolicy(hotel.data!.id),

@@ -38,6 +38,10 @@ describe("approved POS paid-line corrections", () => {
   it("exposes an operator request flow and an approver-readable summary", () => {
     expect(posPage).toContain("request_pos_order_line_correction");
     expect(posPage).toContain("Request line correction");
+    expect(posPage).toContain('name="explanation" required');
+    expect(posPage).not.toContain('name="description" required');
+    expect(posPage).toContain('reason_value: String(form.get("explanation") ?? "").trim()');
+    expect(posPage).toContain('description_value: description');
     expect(posPage).toContain("Customer credit");
     expect(posPage).toContain("Payout needs separate refund approval");
     expect(approvals).toContain("pos_order_line_correction");

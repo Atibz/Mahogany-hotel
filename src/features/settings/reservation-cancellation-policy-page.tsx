@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck } from "lucide-react";
@@ -15,7 +16,7 @@ export function ReservationCancellationPolicyPage() {
   const hotel = useActiveHotel();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useActionMessage<string | null>(null);
   const policy = useQuery({
     queryKey: ["reservation-cancellation-policy", hotel.data?.id],
     queryFn: () => getReservationCancellationPolicy(hotel.data!.id),

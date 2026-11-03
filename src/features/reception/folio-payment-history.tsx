@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useRef, useState, type FormEvent } from "react";
 
 import { Modal } from "@/components/shared/modal";
@@ -30,9 +31,9 @@ export function FolioPaymentHistory({
   const { roleCodes } = useAccess();
   const [action, setAction] = useState<Action | null>(null);
   const [receipt, setReceipt] = useState<FolioPaymentHistory | null>(null);
-  const [receiptPrintMessage, setReceiptPrintMessage] = useState<string | null>(null);
+  const [receiptPrintMessage, setReceiptPrintMessage] = useActionMessage<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useActionMessage<string | null>(null);
   const receiptDocumentRef = useRef<HTMLDivElement>(null);
   const canVoid = roleCodes.some((role) =>
     ["owner", "general_manager", "accountant", "cashier"].includes(role),

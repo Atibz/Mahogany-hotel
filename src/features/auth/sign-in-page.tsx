@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Navigate } from "react-router-dom";
@@ -17,7 +18,7 @@ export function SignInPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [feedback, setFeedback] = useState<Feedback>(() =>
+  const [feedback, setFeedback] = useActionMessage<Feedback>(() =>
     new URLSearchParams(window.location.search).get("password") === "updated"
       ? { tone: "success", text: "Password saved. Sign in with your new password." }
       : null,

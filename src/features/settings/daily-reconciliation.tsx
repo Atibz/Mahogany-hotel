@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, RefreshCw } from "lucide-react";
 import { useState, type FormEvent } from "react";
@@ -36,7 +37,7 @@ function download(source: ReconciliationSource, record?: ReconciliationRecord) {
 export function DailyReconciliation({ hotelId }: { hotelId: string }) {
   const [date, setDate] = useState("");
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<{ message: string; error: boolean } | null>(null);
+  const [notice, setNotice] = useActionMessage<{ message: string; error: boolean } | null>(null);
   const queryClient = useQueryClient();
   const access = useAccess();
   const { session } = useAuth();
@@ -123,7 +124,7 @@ function AccountDeclarations({ source, record, hotelId, editable, correction, ru
     return [a.id, { opening: d ? reconciliationAmountInput(d.opening_kobo) : a.previous_closing_kobo == null ? "" : reconciliationAmountInput(a.previous_closing_kobo), closing: d ? reconciliationAmountInput(d.closing_kobo) : "", evidence: d?.evidence_reference ?? "", note: d?.variance_note ?? "" }];
   })));
   const [exceptionNote, setExceptionNote] = useState(record?.exception_note ?? "");
-  const [error, setError] = useState("");
+  const [error, setError] = useActionMessage<string>("", "error");
   const blocked = Object.values(source.blockers).some((count) => count > 0) || source.accounts.length === 0;
   const update = (id: string, field: keyof Draft, value: string) => setDrafts((current) => ({ ...current, [id]: { ...current[id], [field]: value } }));
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -170,7 +171,7 @@ function ReviewForm({ record, canReview, busy, changed, run }: { record: Reconci
 }
 
 function SetupForms({ hotelId, data, disabled, run }: { hotelId: string; data: DailyData; disabled: boolean; run: RunAction }) {
-  const [error, setError] = useState("");
+  const [error, setError] = useActionMessage<string>("", "error");
   return <fieldset disabled={disabled} className="mt-4 grid gap-4 md:grid-cols-2"><form className="space-y-2" onSubmit={(e) => {
     const form = formData(e); const element = e.currentTarget;
     void run("create_internal_funding_account", { target_hotel_id: hotelId, department_value: String(form.get("department")), method_id: String(form.get("method")), name_value: String(form.get("name")) }).then((ok) => { if (ok) element.reset(); });

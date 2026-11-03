@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useState, type FormEvent, type LabelHTMLAttributes, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layers3, Plus, Utensils, WalletCards } from "lucide-react";
@@ -68,8 +69,8 @@ export function PosCatalogPage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("Outlets");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [message, setMessage] = useActionMessage<string | null>(null);
+  const [errorMessage, setErrorMessage] = useActionMessage<string | null>(null, "error");
   const [selectedMenuOutlet, setSelectedMenuOutlet] = useState("");
   const [selectedModifierItem, setSelectedModifierItem] = useState("");
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);

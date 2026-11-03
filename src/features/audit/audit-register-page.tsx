@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useMemo, useState, type FormEvent } from "react";
 import {
   ChevronLeft,
@@ -90,8 +91,8 @@ export function AuditRegisterPage() {
     limit: PAGE_SIZE,
     offset: 0,
   });
-  const [validationMessage, setValidationMessage] = useState("");
-  const [exportMessage, setExportMessage] = useState("");
+  const [validationMessage, setValidationMessage] = useActionMessage<string>("", "error");
+  const [exportMessage, setExportMessage] = useActionMessage<string>("");
   const [exportError, setExportError] = useState(false);
   const [exportingAll, setExportingAll] = useState(false);
   const [exportLink, setExportLink] = useState<{

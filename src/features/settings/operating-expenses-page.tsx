@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Clock3, Plus, ReceiptText, X } from "lucide-react";
@@ -49,7 +50,7 @@ export function OperatingExpensesPage() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [reviewTarget, setReviewTarget] = useState<Expense | null>(null);
-  const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
+  const [notice, setNotice] = useActionMessage<{ text: string; error?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [fromDate, setFromDate] = useState(weekAgo);
   const [toDate, setToDate] = useState(today);

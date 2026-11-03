@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useRef, useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { FunctionsHttpError } from '@supabase/supabase-js'
@@ -19,7 +20,7 @@ export function StaffPage() {
   const hotel = useActiveHotel()
   const { session } = useAuth()
   const queryClient = useQueryClient()
-  const [message, setMessage] = useState<{ text: string; kind: 'pending' | 'success' | 'error' } | null>(null)
+  const [message, setMessage] = useActionMessage<{ text: string; kind: 'pending' | 'success' | 'error' } | null>(null)
   const [inviting, setInviting] = useState(false)
   const inviteInFlight = useRef(false)
   const [busyProfileId, setBusyProfileId] = useState<string | null>(null)

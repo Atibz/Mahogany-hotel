@@ -1,4 +1,5 @@
 import { FormSubmitButton } from "@/components/shared/form-submit-button";
+import { useActionMessage } from "@/components/shared/action-feedback";
 import { useEffect, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
@@ -74,7 +75,7 @@ export function ReservationsPage() {
   const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
   const [emailingReservationId, setEmailingReservationId] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useActionMessage<string | null>(null);
   const [roomTypeId, setRoomTypeId] = useState("");
   const [roomId, setRoomId] = useState("");
   const [discountRate, setDiscountRate] = useState("0");
@@ -93,7 +94,7 @@ export function ReservationsPage() {
   const [amendmentCheckOut, setAmendmentCheckOut] = useState("");
   const [noShowTarget, setNoShowTarget] = useState<Reservation | null>(null);
   const [noShowReason, setNoShowReason] = useState("");
-  const [noShowError, setNoShowError] = useState<string | null>(null);
+  const [noShowError, setNoShowError] = useActionMessage<string | null>(null, "error");
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [depositReservationId, setDepositReservationId] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
