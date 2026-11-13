@@ -16,15 +16,16 @@ import { mergeRecentAndOpenOrders } from "./order-workspace";
 import { expectedPosShiftCash, posActionErrorMessage } from "./shift-close";
 
 type Outlet = { id: string; name: string; code: string; department_code: string };
-type MenuItem = { id: string; outlet_id: string; category_id: string; name: string; code: string };
+type MenuItem = { id: string; outlet_id: string; category_id: string; name: string; code: string; stock_tracking_mode: "unconfigured" | "automatic" | "non_stock" };
 type Category = { id: string; name: string; display_order: number };
 type Price = { menu_item_id: string; amount_kobo: number; effective_from: string };
 type ModifierGroup = { id: string; outlet_id: string; name: string; min_selections: number; max_selections: number; display_order: number };
-type ModifierOption = { id: string; outlet_id: string; modifier_group_id: string; name: string; price_delta_kobo: number; display_order: number };
+type ModifierOption = { id: string; outlet_id: string; modifier_group_id: string; name: string; price_delta_kobo: number; display_order: number; stock_tracking_mode: "unconfigured" | "automatic" | "non_stock" };
 type ModifierAssignment = { menu_item_id: string; modifier_group_id: string };
 type LineModifier = { id: string; order_line_id: string; group_name_snapshot: string; option_name_snapshot: string; price_delta_kobo: number };
 type Method = { id: string; name: string; code: string; active: boolean; requires_reference: boolean; requires_verification: boolean };
-type Order = { id: string; outlet_id: string; order_number: string; business_date: string; service_mode: string; table_reference: string | null; guest_label: string | null; outlet_name_snapshot: string; department_code_snapshot: string; status: "open" | "settled" | "voided"; created_at: string };
+type Order = { id: string; outlet_id: string; order_number: string; business_date: string; service_mode: string; table_reference: string | null; guest_label: string | null; stay_id: string | null; room_number_snapshot: string | null; outlet_name_snapshot: string; department_code_snapshot: string; status: "open" | "settled" | "voided"; created_at: string };
+type RoomOccupant = { stay_id: string; room_number: string; guest_name: string };
 type Line = { id: string; order_id: string; item_name_snapshot: string; base_unit_price_kobo: number; unit_price_kobo: number; quantity: number; line_total_kobo: number };
 type Tender = { id: string; order_id: string; payment_number: string; payment_method_name_snapshot: string; amount_kobo: number; reference: string | null; status: "completed" | "pending_verification" | "voided"; received_at: string; verification_note: string | null };
 type HotelCollection = { order_id: string; payment_number: string; amount_kobo: number; status: "completed" | "pending_verification" | "refunded" | "voided"; received_at: string; reference: string | null };
@@ -66,10 +67,10 @@ async function loadWorkspace(hotelId: string, outletType: PosOutletType): Promis
   const results = await Promise.all([
     client.from("pos_outlets").select("id,name,code,department_code").eq("hotel_id", hotelId).eq("active", true).eq("outlet_type", outletType).order("name"),
     client.from("pos_menu_categories").select("id,name,display_order").eq("hotel_id", hotelId).eq("active", true).order("display_order"),
-    client.from("pos_menu_items").select("id,outlet_id,category_id,name,code").eq("hotel_id", hotelId).eq("active", true).order("display_order"),
+    client.from("pos_menu_items").select("id,outlet_id,category_id,name,code,stock_tracking_mode").eq("hotel_id", hotelId).eq("active", true).order("display_order"),
     client.from("pos_menu_item_prices").select("menu_item_id,amount_kobo,effective_from").eq("hotel_id", hotelId).lte("effective_from", date).order("effective_from", { ascending: false }),
     client.from("pos_modifier_groups").select("id,outlet_id,name,min_selections,max_selections,display_order").eq("hotel_id", hotelId).eq("active", true).order("display_order"),
-    client.from("pos_modifier_options").select("id,outlet_id,modifier_group_id,name,price_delta_kobo,display_order").eq("hotel_id", hotelId).eq("active", true).order("display_order"),
+    client.from("pos_modifier_options").select("id,outlet_id,modifier_group_id,name,price_delta_kobo,display_order,stock_tracking_mode").eq("hotel_id", hotelId).eq("active", true).order("display_order"),
     client.from("pos_menu_item_modifier_groups").select("menu_item_id,modifier_group_id").eq("hotel_id", hotelId).eq("active", true),
     client.from("payment_methods").select("id,name,code,active,requires_reference,requires_verification").eq("hotel_id", hotelId).order("display_order"),
     client.from("pos_cashier_shifts").select("id,outlet_id,shift_number,opening_float_kobo,opened_at").eq("hotel_id", hotelId).eq("opened_by", userId).eq("status", "open").order("opened_at", { ascending: false }),
@@ -98,12 +99,12 @@ async function loadWorkspace(hotelId: string, outletType: PosOutletType): Promis
   const [recentOrders, openOrders] = outletIds.size
     ? await Promise.all([
       client.from("pos_orders")
-        .select("id,outlet_id,order_number,business_date,service_mode,table_reference,guest_label,outlet_name_snapshot,department_code_snapshot,status,created_at")
+        .select("id,outlet_id,order_number,business_date,service_mode,table_reference,guest_label,stay_id,room_number_snapshot,outlet_name_snapshot,department_code_snapshot,status,created_at")
         .eq("hotel_id", hotelId).in("outlet_id", [...outletIds])
         .order("created_at", { ascending: false }).order("id").limit(60),
       loadAllPages<Order>(async (from, to) => {
         const { data, error: pageError } = await client.from("pos_orders")
-          .select("id,outlet_id,order_number,business_date,service_mode,table_reference,guest_label,outlet_name_snapshot,department_code_snapshot,status,created_at")
+          .select("id,outlet_id,order_number,business_date,service_mode,table_reference,guest_label,stay_id,room_number_snapshot,outlet_name_snapshot,department_code_snapshot,status,created_at")
           .eq("hotel_id", hotelId).in("outlet_id", [...outletIds]).eq("status", "open")
           .order("created_at", { ascending: false }).order("id").range(from, to);
         return { data: (data ?? []) as Order[], error: pageError };
@@ -171,6 +172,12 @@ export function RestaurantPosPage({ outletType = "restaurant" }: { outletType?: 
   const [paymentAmount, setPaymentAmount] = useState("");
   const [reference, setReference] = useState("");
   const [serviceMode, setServiceMode] = useState("dine_in");
+  const [linkRoom, setLinkRoom] = useState(false);
+  const [roomNumber, setRoomNumber] = useState("");
+  const [roomOccupant, setRoomOccupant] = useState<RoomOccupant | null>(null);
+  const [roomConfirmed, setRoomConfirmed] = useState(false);
+  const [roomLookupBusy, setRoomLookupBusy] = useState(false);
+  const [roomLookupError, setRoomLookupError] = useState("");
   const [openingFloat, setOpeningFloat] = useState("0");
   const [declaredCash, setDeclaredCash] = useState("");
   const [reason, setReason] = useState("");
@@ -238,15 +245,39 @@ export function RestaurantPosPage({ outletType = "restaurant" }: { outletType?: 
     } finally { setBusy(false); }
     return false;
   }
+  async function verifyRoom() {
+    if (!supabase || !outlet || !roomNumber.trim()) return;
+    setRoomLookupBusy(true);
+    setRoomLookupError("");
+    setRoomOccupant(null);
+    setRoomConfirmed(false);
+    try {
+      const { data: occupants, error: lookupError } = await supabase.rpc("get_pos_room_occupant", {
+        target_outlet_id: outlet.id,
+        requested_room_number: roomNumber.trim(),
+      });
+      if (lookupError) throw lookupError;
+      const occupant = (occupants as RoomOccupant[] | null)?.[0];
+      if (!occupant) { setRoomLookupError("No checked-in guest is assigned to that room. Check the room number."); return; }
+      setRoomOccupant(occupant);
+    } catch (caught) {
+      setRoomLookupError(posActionErrorMessage(caught));
+    } finally { setRoomLookupBusy(false); }
+  }
   function submitNewOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!outlet) return;
+    if (linkRoom && (!roomOccupant || !roomConfirmed)) {
+      setError("Verify the occupied room and confirm the guest before opening this order.");
+      return;
+    }
     const form = new FormData(event.currentTarget);
-    void call("create_restaurant_pos_order", {
+    void call(linkRoom ? "create_room_linked_pos_order" : "create_restaurant_pos_order", {
       target_outlet_id: outlet.id, service_mode_value: form.get("service"),
       table_reference_value: form.get("table"), guest_label_value: form.get("guest"),
-    }, `${departmentName} order opened. Hotel-room revenue and folios were not changed.`).then(async (saved) => {
-      if (saved) { await workspace.refetch(); }
+      ...(linkRoom ? { target_stay_id: roomOccupant!.stay_id, requested_room_number: roomOccupant!.room_number } : {}),
+    }, linkRoom ? `${departmentName} order linked to Room ${roomOccupant!.room_number}. Any unpaid balance will hold checkout.` : `${departmentName} walk-in order opened. Hotel-room revenue and folios were not changed.`).then(async (saved) => {
+      if (saved) { setRoomOccupant(null); setRoomConfirmed(false); setRoomNumber(""); await workspace.refetch(); }
     });
   }
   function submitVoid(event: FormEvent<HTMLFormElement>) {
@@ -389,11 +420,13 @@ export function RestaurantPosPage({ outletType = "restaurant" }: { outletType?: 
         <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-amber-800">Outlet · {data.date}</p><h2 className="mt-1 text-lg font-semibold">{departmentName} sales</h2></div><label className="block min-w-56 text-xs font-medium text-stone-600">{departmentName} outlet<select className={`${field} mt-1`} value={outlet?.id ?? ""} onChange={(event) => { setOutletId(event.target.value); setSelectedOrderId(""); }}>{data.outlets.map((record) => <option key={record.id} value={record.id}>{record.name} · {record.department_code}</option>)}</select></label></div>
           <p className="mt-2 text-xs text-stone-500">Department attribution is snapshotted for every new order. This workflow shows only {departmentName.toLowerCase()} outlets allowed by your account.</p>
+          {activeMenu.some((item) => item.stock_tracking_mode === "unconfigured") && <p role="status" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">Some menu items have no stock recipe. They can be sold, but those sales will not reduce inventory. Ask the GM to complete Automatic stock usage in the POS catalog before relying on sales-to-stock comparisons.</p>}
+          {data.modifierOptions.some((option) => option.outlet_id === outlet?.id && option.stock_tracking_mode === "unconfigured") && <p role="status" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">Some add-on options have no stock recipe: {data.modifierOptions.filter((option) => option.outlet_id === outlet?.id && option.stock_tracking_mode === "unconfigured").slice(0, 5).map((option) => option.name).join(", ")}{data.modifierOptions.filter((option) => option.outlet_id === outlet?.id && option.stock_tracking_mode === "unconfigured").length > 5 ? " and others" : ""}. Their ingredients will not be deducted until the GM maps them in the POS catalog.</p>}
         </section>
-        {canSell && <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5"><h2 className="font-semibold">Start an order</h2><form onSubmit={submitNewOrder} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><label className="text-xs font-medium text-stone-600">Service<select name="service" value={serviceMode} onChange={(event) => setServiceMode(event.target.value)} className={`${field} mt-1`}><option value="dine_in">Dine in</option><option value="takeaway">Takeaway</option><option value="delivery">Delivery</option></select></label><label className="text-xs font-medium text-stone-600">Table (dine-in)<input name="table" required={serviceMode === "dine_in"} className={`${field} mt-1`} maxLength={30} placeholder="Table 4" /></label><label className="text-xs font-medium text-stone-600">Guest label (optional)<input name="guest" className={`${field} mt-1`} maxLength={100} placeholder="Guest or order name" /></label><FormSubmitButton className={`${primary} self-end`} disabled={busy}>New {departmentName.toLowerCase()} order</FormSubmitButton></form></section>}
+        {canSell && <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5"><h2 className="font-semibold">Start an order</h2><p className="mt-1 text-sm text-stone-600">For a staying guest, verify their room so an unpaid order is visible before checkout. Restaurant and Bar payments remain separate from the hotel folio.</p><form onSubmit={submitNewOrder} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><label className="text-xs font-medium text-stone-600">Service<select name="service" value={serviceMode} onChange={(event) => setServiceMode(event.target.value)} className={`${field} mt-1`}><option value="dine_in">Dine in</option><option value="takeaway">Takeaway</option><option value="delivery">Delivery</option></select></label><label className="text-xs font-medium text-stone-600">Table (dine-in)<input name="table" required={serviceMode === "dine_in"} className={`${field} mt-1`} maxLength={30} placeholder="Table 4" /></label><label className="text-xs font-medium text-stone-600">Guest label (optional)<input name="guest" className={`${field} mt-1`} maxLength={100} placeholder="Guest or order name" /></label><div className="sm:col-span-2 lg:col-span-4"><label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={linkRoom} onChange={(event) => { setLinkRoom(event.target.checked); setRoomOccupant(null); setRoomConfirmed(false); setRoomLookupError(""); }} />This order is for a checked-in room guest</label>{linkRoom && <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3"><div className="flex flex-wrap items-end gap-2"><label className="text-xs font-medium text-stone-700">Room number<input className={`${field} mt-1 w-40`} value={roomNumber} maxLength={30} onChange={(event) => { setRoomNumber(event.target.value); setRoomOccupant(null); setRoomConfirmed(false); setRoomLookupError(""); }} placeholder="e.g. 305" /></label><button type="button" className="rounded-xl border border-amber-800 px-3 py-2.5 text-sm font-semibold text-amber-900 disabled:opacity-50" disabled={!roomNumber.trim() || roomLookupBusy || busy} onClick={() => void verifyRoom()}>{roomLookupBusy ? "Verifying…" : "Verify occupant"}</button></div>{roomLookupError && <p role="alert" className="mt-2 text-sm text-red-800">{roomLookupError}</p>}{roomOccupant && <label className="mt-3 flex items-start gap-2 text-sm text-stone-800"><input type="checkbox" checked={roomConfirmed} onChange={(event) => setRoomConfirmed(event.target.checked)} />I confirm {roomOccupant.guest_name} is ordering for Room {roomOccupant.room_number}.</label>}</div>}</div><FormSubmitButton className={`${primary} self-end`} disabled={busy || roomLookupBusy || (linkRoom && (!roomOccupant || !roomConfirmed))}>New {departmentName.toLowerCase()} order</FormSubmitButton></form></section>}
         <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">Menu</h2><p className="text-xs text-stone-500">Current base prices and selected options are snapshotted on each order line.</p></div><label className="text-xs text-stone-600">Quantity<input type="number" min="1" max="99" value={quantity} onChange={(event) => setQuantity(Math.max(1, Math.min(99, Number(event.target.value) || 1)))} className={`${field} mt-1 w-24`} /></label></div><div className="mt-3 grid gap-2 sm:grid-cols-2">{activeMenu.map((item) => { const price = activePrices.get(item.id); const category = data.categories.find((record) => record.id === item.category_id); const hasModifiers = modifierGroupsFor(item).length > 0; return <article key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-stone-200 p-3"><div><p className="text-xs text-stone-500">{category?.name ?? "Menu"}</p><h3 className="font-medium">{item.name}</h3><p className="text-sm font-semibold">{price ? formatNaira(price) : "No active price"}<span className="ml-1 text-xs font-normal text-stone-500">base price</span></p>{hasModifiers && <p className="mt-1 text-xs text-amber-900">Options available</p>}</div>{canSell && selectedOrder?.status === "open" && price && <button type="button" disabled={busy} onClick={() => addItem(item)} aria-label={hasModifiers ? `Choose options for ${item.name}` : `Add ${item.name}`} className="inline-flex items-center gap-1 rounded-lg bg-amber-100 px-3 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-200 disabled:opacity-50"><Plus className="size-4" />{hasModifiers ? "Choose" : "Add"}</button>}</article>; })}{activeMenu.length === 0 && <p className="text-sm text-stone-500">No active menu items are configured for this outlet.</p>}</div></section>
         <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">Recent {departmentName.toLowerCase()} orders</h2><p className="text-xs text-stone-500">Order history is separated from the hotel folio and payment ledgers.</p></div><select className={`${field} max-w-sm`} value={selectedOrder?.id ?? ""} onChange={(event) => setSelectedOrderId(event.target.value)}><option value="">Select an order</option>{orders.map((record) => <option key={record.id} value={record.id}>{record.order_number} · {record.status} · {record.guest_label || record.service_mode}</option>)}</select></div></section>
-        {selectedOrder && <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-amber-800">{selectedOrder.order_number} · {selectedOrder.business_date}</p><h2 className="mt-1 text-lg font-semibold">{selectedOrder.outlet_name_snapshot} <span className="text-sm font-normal text-stone-500">· {selectedOrder.department_code_snapshot}</span></h2><p className="text-sm text-stone-500">{selectedOrder.service_mode.replace("_", " ")}{selectedOrder.table_reference ? ` · ${selectedOrder.table_reference}` : ""}{selectedOrder.guest_label ? ` · ${selectedOrder.guest_label}` : ""}</p></div><span className={`rounded-full px-3 py-1 text-xs font-semibold ${selectedOrder.status === "settled" ? "bg-emerald-100 text-emerald-800" : selectedOrder.status === "voided" ? "bg-stone-100 text-stone-600" : "bg-amber-100 text-amber-900"}`}>{selectedOrder.status}</span></div>
+        {selectedOrder && <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-amber-800">{selectedOrder.order_number} · {selectedOrder.business_date}</p><h2 className="mt-1 text-lg font-semibold">{selectedOrder.outlet_name_snapshot} <span className="text-sm font-normal text-stone-500">· {selectedOrder.department_code_snapshot}</span></h2><p className="text-sm text-stone-500">{selectedOrder.service_mode.replace("_", " ")}{selectedOrder.table_reference ? ` · ${selectedOrder.table_reference}` : ""}{selectedOrder.guest_label ? ` · ${selectedOrder.guest_label}` : ""}</p>{selectedOrder.stay_id && <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">Linked to Room {selectedOrder.room_number_snapshot} · unpaid balance holds guest checkout</p>}</div><span className={`rounded-full px-3 py-1 text-xs font-semibold ${selectedOrder.status === "settled" ? "bg-emerald-100 text-emerald-800" : selectedOrder.status === "voided" ? "bg-stone-100 text-stone-600" : "bg-amber-100 text-amber-900"}`}>{selectedOrder.status}</span></div>
           <div className="mt-4 divide-y divide-stone-100">{lines.map((line) => { const options = lineModifiers.filter((modifier) => modifier.order_line_id === line.id); const corrections = orderCorrections.filter((correction) => correction.order_line_id === line.id); const lineDelta = corrections.reduce((sum, correction) => sum + Number(correction.amount_delta_kobo), 0); return <div key={line.id} className="flex items-start justify-between gap-3 py-3 text-sm"><div><p className="font-medium">{line.quantity} × {line.item_name_snapshot}</p><p className="mt-0.5 text-xs text-stone-500">Base {formatNaira(line.base_unit_price_kobo)} per item{options.length ? ` · with ${options.length} selected ${options.length === 1 ? "option" : "options"}` : ""}</p>{options.length > 0 && <ul className="mt-1 space-y-0.5 text-xs text-stone-600">{options.map((option) => <li key={option.id}>{option.group_name_snapshot}: {option.option_name_snapshot} {option.price_delta_kobo === 0 ? "· included" : `· ${option.price_delta_kobo > 0 ? "+" : "−"}${formatNaira(Math.abs(option.price_delta_kobo))} per item`}</li>)}</ul>}{lineDelta !== 0 && <p className="mt-1 text-xs font-semibold text-amber-900">Approved corrections: {lineDelta > 0 ? "+" : "−"}{formatNaira(Math.abs(lineDelta))}</p>}{canRequestCorrection && collected > 0 && selectedOrder.status !== "voided" && <button type="button" className="mt-1 text-xs font-semibold text-amber-900 underline" onClick={() => { setCorrectionDirection("decrease"); setCorrectionLine(line); }}>Request line correction</button>}</div><b className="shrink-0">{formatNaira(line.line_total_kobo)}</b></div>; })}{lines.length === 0 && <p className="py-3 text-sm text-stone-500">Add items from the menu above.</p>}</div>
           {orderCorrections.length > 0 && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><h3 className="text-xs font-semibold text-amber-950">Approved line corrections</h3><ul className="mt-2 space-y-2">{orderCorrections.map((correction) => <li key={correction.id} className="text-xs text-amber-950"><b>{correction.correction_number}</b> · {correction.line_name_snapshot} · {Number(correction.amount_delta_kobo) > 0 ? "+" : "−"}{formatNaira(Math.abs(Number(correction.amount_delta_kobo)))}<span className="block text-stone-600">Explanation: {correction.reason}</span></li>)}</ul></div>}
           <dl className="mt-4 grid gap-2 rounded-xl bg-stone-50 p-3 text-sm sm:grid-cols-2 lg:grid-cols-5"><div><dt className="text-stone-500">Adjusted order total</dt><dd className="font-semibold">{formatNaira(gross)}</dd></div><div><dt className="text-stone-500">Collected by outlet</dt><dd className="font-semibold">{formatNaira(collected - refunded)}</dd></div><div><dt className="text-stone-500">Collected by hotel on behalf of outlet</dt><dd className="font-semibold">{formatNaira(collectedByHotel)}</dd></div><div><dt className="text-stone-500">Still due {(pending + pendingAtHotel) > 0 && `· ${formatNaira(pending + pendingAtHotel)} pending`}</dt><dd className="font-semibold">{formatNaira(due)}</dd></div><div><dt className="text-stone-500">Customer credit</dt><dd className="font-semibold">{formatNaira(credit)}{credit > 0 && <span className="block text-xs font-normal text-stone-600">Payout needs separate refund approval</span>}</dd></div></dl>

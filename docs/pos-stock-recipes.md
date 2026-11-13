@@ -1,0 +1,11 @@
+# POS sales and stock
+
+Restaurant and Bar sales are separate from hotel folio payments. Stock is also tracked separately by location. An order line with an approved stock recipe deducts from its outlet's stock location when the item is added to the order, even if the guest has not yet paid. Payment does not deduct it again. Voiding an unpaid order adds an equal, linked reversal. A monetary refund or price correction does not automatically return consumed stock.
+
+The GM configures recipes in **POS catalog → Menu → Automatic stock usage**. The mapping lists each inventory ingredient and its quantity per one menu item or modifier option. For example, a bottled drink can consume one bottle. A prepared meal needs all relevant ingredients and measured portions. Transfer stock from the main store into the restaurant or bar location before sale; otherwise an automatically tracked sale is rejected for insufficient stock. Only verified recipes should be activated.
+
+Existing menu items and modifier options start as **unconfigured**. They remain sellable to avoid breaking operations, but their sales do not reduce inventory. A menu item or option that genuinely consumes no stock can be explicitly marked **No stock consumed**. Until all stock-consuming items and add-ons are mapped, sales-to-stock comparisons are incomplete. Prior orders are not backfilled.
+
+The **Inventory → Stock overview → POS sales-to-stock coverage** panel (GM/Owner) shows sold-unit recipe coverage by outlet, ingredient quantities deducted from non-voided orders, and the latest physical stock observations for the selected business date. Unconfigured sales are called out explicitly. A physical observation compares counted stock with the ledger balance at counting time; it is not a direct measurement of consumption by a particular order. A day with no unconfigured sales is not proof that every catalog recipe has been checked or that physical stock is correct.
+
+The recipe uses positive ingredient consumption. A modifier that removes or substitutes an ingredient needs a separately verified base recipe; do not assume the add-on mapping will subtract it. The system does not yet calculate preparation yield, spoilage, complimentary consumption, substitutions, or stock cost/valuation. Record physical variances and wastage through the existing inventory and daily spot-check flows.

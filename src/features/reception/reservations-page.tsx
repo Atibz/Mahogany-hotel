@@ -16,6 +16,7 @@ import { formatNaira, nairaToKobo } from "@/lib/money";
 
 import {
   amendReservation,
+  amendReservationWithDiscountRequest,
   authorizeReservationBusinessAccount,
   cancelReservation,
   createReservation,
@@ -90,6 +91,8 @@ export function ReservationsPage() {
     null,
   );
   const [amendmentRoomTypeId, setAmendmentRoomTypeId] = useState("");
+  const [amendmentRoomId, setAmendmentRoomId] = useState("");
+  const [amendmentAgreedRate, setAmendmentAgreedRate] = useState("");
   const [amendmentCheckIn, setAmendmentCheckIn] = useState("");
   const [amendmentCheckOut, setAmendmentCheckOut] = useState("");
   const [noShowTarget, setNoShowTarget] = useState<Reservation | null>(null);
@@ -127,6 +130,21 @@ export function ReservationsPage() {
     checkInDate: amendmentCheckIn,
     checkOutDate: amendmentCheckOut,
   });
+  const amendmentSelectedRoom = amendmentRooms.data?.find((room) => room.id === amendmentRoomId);
+  const amendmentStandardRateKobo = amendmentSelectedRoom?.current_rate_kobo ??
+    rooms.data?.find((room) => room.id === amendmentRoomId)?.current_rate_kobo;
+  const amendmentRequestedRateKobo = Math.round(Number(amendmentAgreedRate) * 100);
+  const amendmentKeepsExistingRate = amendmentTarget != null &&
+    amendmentRequestedRateKobo === amendmentTarget.agreed_rate_kobo &&
+    amendmentRoomId === amendmentTarget.room_id &&
+    amendmentRoomTypeId === amendmentTarget.room_type_id;
+  const amendmentNeedsApproval = amendmentStandardRateKobo != null &&
+    Number.isFinite(amendmentRequestedRateKobo) &&
+    amendmentRequestedRateKobo > 0 &&
+    amendmentRequestedRateKobo < amendmentStandardRateKobo &&
+    !amendmentKeepsExistingRate &&
+    (roleCodes.includes("receptionist") ||
+      amendmentRequestedRateKobo * 100 < amendmentStandardRateKobo * 80);
   const availabilityReady = Boolean(
     roomTypeId && checkInDate && checkOutDate && checkOutDate > checkInDate,
   );
@@ -175,6 +193,8 @@ export function ReservationsPage() {
     } else if (action === "amend") {
       setAmendmentTarget(reservation);
       setAmendmentRoomTypeId(reservation.room_type_id);
+      setAmendmentRoomId(reservation.room_id ?? "");
+      setAmendmentAgreedRate((reservation.agreed_rate_kobo / 100).toFixed(2));
       setAmendmentCheckIn(reservation.check_in_date);
       setAmendmentCheckOut(reservation.check_out_date);
     } else if (action === "cancel") {
@@ -247,7 +267,8 @@ export function ReservationsPage() {
     try {
       setIsSaving(true);
       setMessage(null);
-      const requiresApproval = discountPercentage > 20;
+      const requiresApproval = discountPercentage > 0 &&
+        (roleCodes.includes("receptionist") || discountPercentage > 20);
       if (requiresApproval) {
         await createReservationWithDiscountRequest({
           hotelId: hotel.data.id,
@@ -286,7 +307,7 @@ export function ReservationsPage() {
       });
       setMessage(
         requiresApproval
-          ? "Reservation created at the standard rate. The exceptional discount is awaiting independent GM approval before check-in."
+          ? "Reservation created at the standard rate. The discount needs independent GM or MD approval before check-in."
           : "Reservation created and the agreed rate was saved as a snapshot.",
       );
     } catch (error) {
@@ -325,24 +346,32 @@ export function ReservationsPage() {
 
   async function handleAmend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!amendmentTarget) return;
+    if (!amendmentTarget || !amendmentRoomId || amendmentStandardRateKobo == null) return;
     const form = new FormData(event.currentTarget);
+    const agreedRateKobo = nairaToKobo(amendmentAgreedRate);
+    const discountNeedsRequest = amendmentNeedsApproval;
     setIsSaving(true);
     try {
-      await amendReservation({
+      const values = {
         reservationId: amendmentTarget.id,
         roomTypeId: amendmentRoomTypeId,
-        roomId: String(form.get("roomId")),
+        roomId: amendmentRoomId,
         checkInDate: amendmentCheckIn,
         checkOutDate: amendmentCheckOut,
-        agreedRateKobo: nairaToKobo(String(form.get("agreedRate"))),
         reason: String(form.get("reason")),
-      });
+      };
+      if (discountNeedsRequest) {
+        await amendReservationWithDiscountRequest({ ...values, requestedRateKobo: agreedRateKobo });
+      } else {
+        await amendReservation({ ...values, agreedRateKobo });
+      }
       setAmendmentTarget(null);
       await queryClient.invalidateQueries({
         queryKey: ["reservations", hotel.data?.id],
       });
-      setMessage("Reservation amended and the change was recorded.");
+      setMessage(discountNeedsRequest
+        ? "Reservation amended at the standard rate. The requested discount needs independent GM or MD approval before it applies."
+        : "Reservation amended and the change was recorded.");
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -588,10 +617,10 @@ export function ReservationsPage() {
               className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2.5"
             >
               <option value="0">No discount</option>
-              <option value="5">5% discount</option>
-              <option value="10">10% discount</option>
-              <option value="15">15% discount</option>
-              <option value="20">20% discount</option>
+              <option value="5">5% discount{roleCodes.includes("receptionist") ? " — approval required" : ""}</option>
+              <option value="10">10% discount{roleCodes.includes("receptionist") ? " — approval required" : ""}</option>
+              <option value="15">15% discount{roleCodes.includes("receptionist") ? " — approval required" : ""}</option>
+              <option value="20">20% discount{roleCodes.includes("receptionist") ? " — approval required" : ""}</option>
               <option value="25">25% — approval required</option>
               <option value="30">30% — approval required</option>
             </select>
@@ -668,10 +697,10 @@ export function ReservationsPage() {
             </span>
             <br />
             <span className="text-[11px] leading-4">
-              Discounts above 20% require GM approval before check-in.
+              Reception discounts of any size require independent GM or MD approval before check-in. Management discounts above 20% also require approval.
             </span>
           </p>
-          {discountPercentage > 20 && (
+          {discountPercentage > 0 && (roleCodes.includes("receptionist") || discountPercentage > 20) && (
             <textarea
               required
               name="discountReason"
@@ -880,7 +909,11 @@ export function ReservationsPage() {
             <select
               required
               value={amendmentRoomTypeId}
-              onChange={(event) => setAmendmentRoomTypeId(event.target.value)}
+              onChange={(event) => {
+                setAmendmentRoomTypeId(event.target.value);
+                setAmendmentRoomId("");
+                setAmendmentAgreedRate("");
+              }}
               className="rounded-lg border border-stone-300 px-3 py-2.5"
             >
               {types.data.map((type) => (
@@ -892,7 +925,16 @@ export function ReservationsPage() {
             <select
               required
               name="roomId"
-              defaultValue={amendmentTarget.room_id ?? ""}
+              value={amendmentRoomId}
+              onChange={(event) => {
+                const selectedId = event.target.value;
+                setAmendmentRoomId(selectedId);
+                const selected = amendmentRooms.data?.find((room) => room.id === selectedId)
+                  ?? rooms.data?.find((room) => room.id === selectedId);
+                if (selected && selectedId !== amendmentTarget.room_id) {
+                  setAmendmentAgreedRate((selected.current_rate_kobo / 100).toFixed(2));
+                }
+              }}
               disabled={
                 !amendmentRooms.data?.length && !amendmentTarget.room_id
               }
@@ -940,12 +982,18 @@ export function ReservationsPage() {
               required
               name="agreedRate"
               type="number"
-              min="0"
+              min="0.01"
               step="0.01"
-              defaultValue={(amendmentTarget.agreed_rate_kobo / 100).toFixed(2)}
+              value={amendmentAgreedRate}
+              onChange={(event) => setAmendmentAgreedRate(event.target.value)}
               placeholder="Nightly rate (₦)"
               className="rounded-lg border border-stone-300 px-3 py-2.5"
             />
+            {amendmentNeedsApproval && amendmentStandardRateKobo != null && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                  Standard rate: {formatNaira(amendmentStandardRateKobo)}. A lower rate needs independent GM or MD approval; it will not apply until approval is executed.
+                </p>
+              )}
             <textarea
               required
               name="reason"
@@ -956,11 +1004,13 @@ export function ReservationsPage() {
             <FormSubmitButton
               disabled={
                 isSaving ||
+                !amendmentRoomId ||
+                amendmentStandardRateKobo == null ||
                 (!amendmentRooms.data?.length && !amendmentTarget.room_id)
               }
               className="rounded-lg bg-amber-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
             >
-              Save amendment
+              {amendmentNeedsApproval ? "Amend and request approval" : "Save amendment"}
             </FormSubmitButton>
           </form>
         )}

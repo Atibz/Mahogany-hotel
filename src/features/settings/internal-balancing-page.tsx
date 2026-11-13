@@ -7,6 +7,7 @@ import { useActiveHotel } from "@/features/reception/use-reception";
 import { formatNaira } from "@/lib/money";
 import { supabase } from "@/lib/supabase/client";
 import { DailyReconciliation } from "./daily-reconciliation";
+import { DailyOperationalChecks } from "./daily-operational-checks";
 
 type Department = "hotel" | "restaurant" | "bar";
 type BalanceRow = {
@@ -65,6 +66,7 @@ export function InternalBalancingPage() {
     </header>
 
     <DailyReconciliation hotelId={hotel.data.id} />
+    <DailyOperationalChecks hotelId={hotel.data.id} />
 
     <aside className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950"><p className="font-semibold">Separate ledgers; no automatic netting</p><p className="mt-1">In the period comparison below, Hotel collections come from completed hotel payments (including company-account settlements); Restaurant and Bar collections come from their own POS payment records. Refunds are shown separately and reduce net collections. Expenses are grouped by incurred date and shown by review status; because the register records already-paid expenses, recorded expense totals include approved, pending, and rejected entries. No money is moved, and no expense is automatically deducted from collections. A difference here is not profit.</p></aside>
 

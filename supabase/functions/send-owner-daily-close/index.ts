@@ -18,7 +18,67 @@ Deno.serve(async (request) => {
   const { data: jobs, error: claimError } = await admin.rpc("claim_owner_daily_close_email");
   if (claimError) return Response.json({ error: "Could not claim a report job" }, { status: 500 });
   const job = jobs?.[0];
-  if (!job) return Response.json({ processed: 0 });
+  if (!job) {
+    const { data: alerts, error: alertError } = await admin.rpc("claim_owner_missing_close_alert");
+    if (alertError) return Response.json({ error: "Could not claim a missing-close alert" }, { status: 500 });
+    const alert = alerts?.[0];
+    if (!alert) return Response.json({ processed: 0 });
+
+    const retryAlert = async (message: string) => {
+      await admin.from("owner_missing_close_alert_jobs").update({
+        status: "pending", locked_until: null, last_error: message,
+        next_attempt_at: new Date(Date.now() + Math.min(24 * 60, 2 ** Math.min(alert.attempts, 10)) * 60_000).toISOString(),
+      }).eq("id", alert.id).eq("status", "sending");
+      return Response.json({ error: message }, { status: 502 });
+    };
+
+    try {
+      // A manager may have closed the day while the alert was being claimed.
+      const { data: lateClose, error: closeError } = await admin.from("business_day_closes")
+        .select("id").eq("hotel_id", alert.hotel_id).eq("business_date", alert.business_date).maybeSingle();
+      if (closeError) return await retryAlert("Could not verify missing-close status");
+      if (lateClose) {
+        await admin.from("owner_missing_close_alert_jobs").update({ status: "resolved", locked_until: null })
+          .eq("id", alert.id).eq("status", "sending");
+        return Response.json({ processed: 0, resolved: 1 });
+      }
+      const { data: hotel, error: hotelError } = await admin.from("hotels")
+        .select("trading_name").eq("id", alert.hotel_id).single();
+      if (hotelError || !hotel) return await retryAlert("Hotel details are unavailable");
+      const { data: role, error: roleError } = await admin.from("roles")
+        .select("id").eq("hotel_id", alert.hotel_id).eq("code", "owner").eq("active", true).single();
+      if (roleError || !role) return await retryAlert("Exactly one active owner role is required");
+      const { data: assignments, error: assignmentError } = await admin.from("user_roles")
+        .select("profile_id, profiles!inner(active)").eq("role_id", role.id).eq("profiles.active", true);
+      if (assignmentError || assignments?.length !== 1) return await retryAlert("Exactly one active owner account is required");
+      const { data: owner, error: ownerError } = await admin.auth.admin.getUserById(assignments[0].profile_id);
+      if (ownerError || !owner.user?.email) return await retryAlert("Owner email is unavailable");
+
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json",
+          "Idempotency-Key": `owner-missing-close/${alert.hotel_id}/${alert.business_date}` },
+        body: JSON.stringify({
+          from: sender, to: [owner.user.email],
+          subject: `${hotel.trading_name}: business day ${alert.business_date} not closed`,
+          text: `${hotel.trading_name}'s business day ${alert.business_date} has not been closed.\n\n` +
+            "The private daily summary cannot be issued until a manager completes the day close. " +
+            "Please ask the General Manager to review night audit, pending payments and cash handovers, then close the day. " +
+            "This is a missing-close alert, not a financial report.\n",
+        }),
+      });
+      if (!response.ok) return await retryAlert(`Email provider rejected missing-close alert (HTTP ${response.status})`);
+      const provider = await response.json().catch(() => ({}));
+      const { error: completedError } = await admin.from("owner_missing_close_alert_jobs").update({
+        status: "sent", sent_at: new Date().toISOString(), locked_until: null,
+        provider_message_id: typeof provider.id === "string" ? provider.id : null,
+      }).eq("id", alert.id).eq("status", "sending");
+      if (completedError) return Response.json({ error: "Provider accepted alert but delivery record was not completed" }, { status: 500 });
+      return Response.json({ processed: 1, kind: "missing_close" });
+    } catch {
+      return await retryAlert("Private missing-close alert delivery failed; retry scheduled");
+    }
+  }
 
   const retry = async (message: string) => {
     await admin.from("owner_daily_close_email_jobs").update({

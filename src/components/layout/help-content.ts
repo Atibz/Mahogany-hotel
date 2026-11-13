@@ -123,7 +123,7 @@ export const helpGuides: HelpGuide[] = [
       "If you are authorized to record a stock movement, choose the correct item, movement type, locations, quantity, and supplier/reference where applicable.",
       "Enter a clear reason and confirm the posted movement appears in the ledger.",
     ],
-    note: "Stock movements are permanent ledger records. Inventory currently tracks quantities only; it does not calculate item costs or automatically consume stock from Restaurant/Bar POS. If the item, location, or quantity is uncertain, pause and ask the GM.",
+    note: "Stock movements are permanent ledger records. Verified Restaurant and Bar recipes deduct stock when an order item is added; unconfigured items and options do not. Inventory tracks quantities, not costs. If a recipe, location, or quantity is uncertain, pause and ask the GM.",
   },
   {
     id: "restaurant-pos",
@@ -268,17 +268,17 @@ export const helpGuides: HelpGuide[] = [
   {
     id: "discount-approval",
     title: "Handle a reservation discount",
-    summary: "Keep larger discounts under GM approval.",
+    summary: "Reception discounts need approval before check-in.",
     route: "/reservations",
     routeLabel: "Open Reservations",
     roles: ["owner", "general_manager", "receptionist"],
     keywords: ["discount", "price", "rate", "approve", "20%"],
     steps: [
       "Review the room's displayed rate and the proposed discount on the reservation form or amendment.",
-      "If the discount exceeds 20%, enter the required reason and submit it for independent GM approval; the reservation is created at the standard rate while it waits.",
+      "Reception staff must give a reason and request independent GM or MD approval for any discount. The reservation stays at the standard rate while approval is pending. Management discounts above 20% also require approval.",
       "Recheck the approved final amount before confirming it to the guest.",
     ],
-    note: "Do not split or misstate a discount to evade approval. The GM is the hotel's normal approver.",
+    note: "Do not split or misstate a discount to evade approval. A receptionist must not apply a walk-in discount directly.",
   },
   {
     id: "room-move",

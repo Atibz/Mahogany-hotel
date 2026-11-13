@@ -24,6 +24,8 @@ Export the selected snapshot for its signed figures and reviewer IDs, or export 
 
 The workflow uses existing finance permissions: payments, POS sales and expense read permissions for visibility, expense submit permission for preparation, and expense review permission for independent sign-off. There are no direct authenticated table writes. This is a separate finance reconciliation approval; it does not replace room-night posting approval or automatically close the hotel business day.
 
+For independent room-occupancy observations and physical item/location counts, see [daily physical checks](daily-physical-checks.md). Those spot checks expose discrepancies without changing either ledger and are not a substitute for this money reconciliation.
+
 ## Verification
 
 `npm test -- tests/internal-reconciliation-database.test.ts src/features/settings/internal-reconciliation.test.ts src/features/settings/daily-reconciliation.test.ts`

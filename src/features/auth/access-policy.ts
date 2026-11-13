@@ -21,6 +21,7 @@ export type Feature =
 export type RoleCode =
   | "owner"
   | "general_manager"
+  | "managing_director"
   | "receptionist"
   | "cashier"
   | "restaurant_staff"
@@ -60,6 +61,7 @@ const featureRoles: Record<Feature, RoleCode[]> = {
 export function canRoleAccess(roleCodes: RoleCode[], feature: Feature) {
   return (
     roleCodes.includes("owner") ||
+    (roleCodes.includes("managing_director") && featureRoles[feature].includes("general_manager")) ||
     featureRoles[feature].some((role) => roleCodes.includes(role))
   );
 }

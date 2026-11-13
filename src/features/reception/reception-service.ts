@@ -70,6 +70,17 @@ export type DepartureQueueItem = {
   ready_to_checkout: boolean;
   blocking_reason: string | null;
 };
+export type RoomPosCheckoutHold = {
+  stay_id: string;
+  order_id: string;
+  order_number: string;
+  outlet_name: string;
+  department_code: string;
+  gross_kobo: number;
+  completed_kobo: number;
+  pending_kobo: number;
+  balance_kobo: number;
+};
 export type ArrivalAttentionItem = {
   reservation_id: string;
   reservation_number: string;
@@ -617,6 +628,14 @@ export async function getDepartureQueue(
   return (data ?? []) as DepartureQueueItem[];
 }
 
+export async function getRoomPosCheckoutHolds(hotelId: string): Promise<RoomPosCheckoutHold[]> {
+  const { data, error } = await client().rpc("get_room_pos_checkout_holds", {
+    target_hotel_id: hotelId,
+  });
+  throwIfError(error);
+  return (data ?? []) as RoomPosCheckoutHold[];
+}
+
 export async function getArrivalAttention(hotelId: string) {
   const { data, error } = await client().rpc("get_arrival_attention", {
     target_hotel_id: hotelId,
@@ -1031,6 +1050,28 @@ export async function amendReservation(values: {
     amendment_reason: values.reason,
   });
   throwIfError(error);
+}
+
+export async function amendReservationWithDiscountRequest(values: {
+  reservationId: string;
+  roomTypeId: string;
+  roomId: string;
+  checkInDate: string;
+  checkOutDate: string;
+  requestedRateKobo: number;
+  reason: string;
+}) {
+  const { data, error } = await client().rpc("amend_reservation_with_discount_request", {
+    target_reservation_id: values.reservationId,
+    target_room_type_id: values.roomTypeId,
+    target_room_id: values.roomId,
+    arrival_date: values.checkInDate,
+    departure_date: values.checkOutDate,
+    requested_rate_kobo: values.requestedRateKobo,
+    amendment_reason: values.reason,
+  });
+  throwIfError(error);
+  return data as string;
 }
 
 export async function markReservationNoShow(

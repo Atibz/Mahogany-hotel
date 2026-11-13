@@ -16,6 +16,7 @@ import {
   completeDepartureCheckout,
   getCheckoutInvoice,
   getDepartureQueue,
+  getRoomPosCheckoutHolds,
   prepareDepartureFolio,
   type CheckoutInvoice,
   type DepartureQueueItem,
@@ -23,6 +24,7 @@ import {
 import {
   useActiveHotel,
   useDepartureQueue,
+  useRoomPosCheckoutHolds,
   useFolioPaymentHistory,
   useFolios,
 } from "./use-reception";
@@ -37,6 +39,7 @@ const emptyChecklist = {
 export function DeparturesPage() {
   const hotel = useActiveHotel();
   const departures = useDepartureQueue(hotel.data?.id);
+  const outletHolds = useRoomPosCheckoutHolds(hotel.data?.id);
   const folios = useFolios(hotel.data?.id);
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<DepartureQueueItem | null>(null);
@@ -58,6 +61,9 @@ export function DeparturesPage() {
     (folio) => folio.id === selected?.folio_id,
   );
   const checklistComplete = Object.values(checklist).every(Boolean);
+  const holdsFor = (stayId: string) => outletHolds.data?.filter((hold) => hold.stay_id === stayId) ?? [];
+  const selectedHolds = selected ? holdsFor(selected.stay_id) : [];
+  const readyWithoutOutletHolds = (item: DepartureQueueItem) => item.ready_to_checkout && holdsFor(item.stay_id).length === 0;
 
   function openDeparture(departure: DepartureQueueItem) {
     setSelected(departure);
@@ -66,6 +72,7 @@ export function DeparturesPage() {
     setMessage(null);
     setModalMessage(null);
     setPreparedStayId(null);
+    void outletHolds.refetch();
     void prepareFolio(departure);
   }
 
@@ -109,11 +116,20 @@ export function DeparturesPage() {
   }
 
   async function completeCheckout() {
-    if (!selected || !checklistComplete || !selected.ready_to_checkout) return;
+    if (!selected || !checklistComplete || !selected.ready_to_checkout || outletHolds.isLoading || outletHolds.isError) return;
     setBusy(true);
     setMessage(null);
     setModalMessage(null);
     try {
+      const currentHolds = await queryClient.fetchQuery({
+        queryKey: ["room-pos-checkout-holds", hotel.data?.id],
+        queryFn: () => getRoomPosCheckoutHolds(hotel.data!.id),
+        staleTime: 0,
+      });
+      if (currentHolds.some((hold) => hold.stay_id === selected.stay_id)) {
+        await outletHolds.refetch();
+        throw new Error("Restaurant or Bar orders still need payment or verification before checkout.");
+      }
       const invoiceId = await completeDepartureCheckout({
         stayId: selected.stay_id,
         roomChargesConfirmed: checklist.roomCharges,
@@ -127,6 +143,7 @@ export function DeparturesPage() {
         queryClient.invalidateQueries({
           queryKey: ["departure-queue", hotel.data?.id],
         }),
+        queryClient.invalidateQueries({ queryKey: ["room-pos-checkout-holds", hotel.data?.id] }),
         queryClient.invalidateQueries({
           queryKey: ["in-house-room-occupants", hotel.data?.id],
         }),
@@ -180,9 +197,9 @@ export function DeparturesPage() {
     if (!opened) setMessage("The invoice print view could not be opened.");
   }
 
-  if (hotel.isLoading || departures.isLoading || folios.isLoading)
+  if (hotel.isLoading || departures.isLoading || folios.isLoading || outletHolds.isLoading)
     return <PageLoading />;
-  if (hotel.error || departures.error || folios.error)
+  if (hotel.error || departures.error || folios.error || outletHolds.error)
     return <PageError message="Unable to load the departure queue." />;
   if (!hotel.data)
     return <EmptyState>No hotel is assigned to your staff account.</EmptyState>;
@@ -194,7 +211,7 @@ export function DeparturesPage() {
     (item) => item.departure_state === "due_today",
   ).length;
   const ready = departures.data?.filter(
-    (item) => item.ready_to_checkout,
+    (item) => readyWithoutOutletHolds(item),
   ).length;
   const visibleDepartures = departures.data?.filter((item) => {
     const query = search.trim().toLowerCase();
@@ -205,7 +222,7 @@ export function DeparturesPage() {
         .includes(query);
     const matchesFilter =
       departureFilter === "all" ||
-      (departureFilter === "ready" && item.ready_to_checkout) ||
+      (departureFilter === "ready" && readyWithoutOutletHolds(item)) ||
       item.departure_state === departureFilter;
     return matchesSearch && matchesFilter;
   });
@@ -317,11 +334,12 @@ export function DeparturesPage() {
                       ? `${formatNaira(Math.abs(item.balance_kobo))} credit`
                       : "Settled"}
                 </p>
+                {holdsFor(item.stay_id).length > 0 && <p className="mt-1 font-semibold text-red-800">{holdsFor(item.stay_id).length} unpaid Restaurant/Bar {holdsFor(item.stay_id).length === 1 ? "order" : "orders"}</p>}
               </div>
               <span
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${item.ready_to_checkout ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${readyWithoutOutletHolds(item) ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}
               >
-                {item.ready_to_checkout ? "Ready" : item.blocking_reason}
+                {holdsFor(item.stay_id).length ? "Outlet payment needed" : item.ready_to_checkout ? "Ready" : item.blocking_reason}
               </span>
             </button>
           ))
@@ -347,6 +365,12 @@ export function DeparturesPage() {
                 {selected.guest_phone || "No phone"} ·{" "}
                 {selected.guest_email || "No email"}
               </p>
+            </section>
+
+            <section className="rounded-lg border border-stone-200 p-4">
+              <h3 className="font-semibold">Restaurant and Bar orders</h3>
+              {outletHolds.isFetching && <p className="mt-2 text-sm text-stone-600">Refreshing outlet orders…</p>}
+              {selectedHolds.length > 0 ? <><p className="mt-1 text-sm text-red-800">Checkout is blocked until these orders are settled or pending payments are verified. Outlet sales remain separate from the hotel folio.</p><ul className="mt-3 space-y-2">{selectedHolds.map((hold) => <li key={hold.order_id} className="rounded-lg bg-red-50 p-3 text-sm"><p className="font-semibold">{hold.outlet_name} · {hold.order_number}</p><p>{formatNaira(hold.balance_kobo)} outstanding{hold.pending_kobo > 0 ? ` · ${formatNaira(hold.pending_kobo)} pending verification` : ""}</p></li>)}</ul></> : <p className="mt-1 text-sm text-stone-600">No unpaid room-linked outlet orders found. Confirm other incidentals with the guest and outlet teams.</p>}
             </section>
 
             <section>
@@ -434,6 +458,7 @@ export function DeparturesPage() {
               disabled={
                 preparedStayId !== selected.stay_id ||
                 !selected.ready_to_checkout ||
+                selectedHolds.length > 0 || outletHolds.isFetching || outletHolds.isError ||
                 busy
               }
             >
@@ -484,6 +509,7 @@ export function DeparturesPage() {
                 busy ||
                 preparedStayId !== selected.stay_id ||
                 !selected.ready_to_checkout ||
+                selectedHolds.length > 0 || outletHolds.isFetching || outletHolds.isError ||
                 !checklistComplete
               }
               onClick={completeCheckout}

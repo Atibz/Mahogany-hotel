@@ -32,6 +32,7 @@ import {
   getReservationBusinessAuthorizations,
   getReservations,
   getRoomBoard,
+  getRoomPosCheckoutHolds,
   getRoomTypeOccupancy,
   getRoomTypes,
   searchActivityRegister,
@@ -68,6 +69,16 @@ export function useDepartureQueue(hotelId?: string) {
     queryFn: () => getDepartureQueue(hotelId!),
     enabled: Boolean(hotelId),
     refetchInterval: 60_000,
+  });
+}
+
+export function useRoomPosCheckoutHolds(hotelId?: string) {
+  return useQuery({
+    queryKey: ["room-pos-checkout-holds", hotelId],
+    queryFn: () => getRoomPosCheckoutHolds(hotelId!),
+    enabled: Boolean(hotelId),
+    refetchOnMount: "always",
+    refetchInterval: 30_000,
   });
 }
 

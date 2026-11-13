@@ -14,7 +14,10 @@ export function useAccess() {
     const ids = (assignments ?? []).map((assignment) => assignment.role_id); if (!ids.length) return [] as RoleCode[]
     const { data, error } = await supabase.from('roles').select('code').eq('hotel_id', hotel.data.id).in('id', ids).eq('active', true)
     if (error) throw error
-    return (data ?? []).map((role) => role.code as RoleCode)
+    const codes = (data ?? []).map((role) => role.code as RoleCode)
+    return codes.includes('managing_director')
+      ? ['managing_director', ...codes.filter((code) => code !== 'managing_director' && code !== 'general_manager'), 'general_manager'] as RoleCode[]
+      : codes
   } })
   const roleCodes = roles.data ?? []
   return { isLoading: hotel.isLoading || roles.isLoading, error: hotel.error ?? roles.error, roleCodes, canAccess: (feature: Feature) => canRoleAccess(roleCodes, feature) }

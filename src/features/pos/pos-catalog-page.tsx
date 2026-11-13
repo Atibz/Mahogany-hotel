@@ -9,13 +9,14 @@ import { Modal } from "@/components/shared/modal";
 import { useActiveHotel } from "@/features/reception/use-reception";
 import { formatNaira, nairaToKobo } from "@/lib/money";
 import { supabase } from "@/lib/supabase/client";
+import { PosStockMapping } from "./pos-stock-mapping";
 
 type Outlet = { id: string; code: string; name: string; outlet_type: "restaurant" | "bar"; department_code: string; kitchen_tickets_enabled: boolean; active: boolean };
 type Category = { id: string; outlet_id: string; code: string; name: string; display_order: number; active: boolean };
-type MenuItem = { id: string; outlet_id: string; category_id: string; code: string; name: string; description: string | null; display_order: number; active: boolean };
+type MenuItem = { id: string; outlet_id: string; category_id: string; code: string; name: string; description: string | null; display_order: number; active: boolean; stock_tracking_mode: "unconfigured" | "automatic" | "non_stock" };
 type Price = { id: string; menu_item_id: string; amount_kobo: number; effective_from: string };
 type ModifierGroup = { id: string; outlet_id: string; code: string; name: string; min_selections: number; max_selections: number; active: boolean };
-type ModifierOption = { id: string; modifier_group_id: string; code: string; name: string; price_delta_kobo: number; active: boolean };
+type ModifierOption = { id: string; outlet_id: string; modifier_group_id: string; code: string; name: string; price_delta_kobo: number; active: boolean; stock_tracking_mode: "unconfigured" | "automatic" | "non_stock" };
 type Department = { code: string; name: string };
 type ModifierAssignment = { menu_item_id: string; modifier_group_id: string; active: boolean };
 type CatalogData = { outlets: Outlet[]; categories: Category[]; items: MenuItem[]; prices: Price[]; groups: ModifierGroup[]; options: ModifierOption[]; assignments: ModifierAssignment[]; departments: Department[] };
@@ -36,10 +37,10 @@ async function loadCatalog(hotelId: string): Promise<CatalogData> {
   const results = await Promise.all([
     supabase.from("pos_outlets").select("id, code, name, outlet_type, department_code, kitchen_tickets_enabled, active").eq("hotel_id", hotelId).order("name"),
     supabase.from("pos_menu_categories").select("id, outlet_id, code, name, display_order, active").eq("hotel_id", hotelId).order("display_order"),
-    supabase.from("pos_menu_items").select("id, outlet_id, category_id, code, name, description, display_order, active").eq("hotel_id", hotelId).order("display_order"),
+    supabase.from("pos_menu_items").select("id, outlet_id, category_id, code, name, description, display_order, active, stock_tracking_mode").eq("hotel_id", hotelId).order("display_order"),
     supabase.from("pos_menu_item_prices").select("id, menu_item_id, amount_kobo, effective_from").eq("hotel_id", hotelId).order("effective_from", { ascending: false }),
     supabase.from("pos_modifier_groups").select("id, outlet_id, code, name, min_selections, max_selections, active").eq("hotel_id", hotelId).order("name"),
-    supabase.from("pos_modifier_options").select("id, modifier_group_id, code, name, price_delta_kobo, active").eq("hotel_id", hotelId).order("name"),
+    supabase.from("pos_modifier_options").select("id, outlet_id, modifier_group_id, code, name, price_delta_kobo, active, stock_tracking_mode").eq("hotel_id", hotelId).order("name"),
     supabase.from("pos_menu_item_modifier_groups").select("menu_item_id, modifier_group_id, active").eq("hotel_id", hotelId).eq("active", true),
     supabase.from("departments").select("code, name").eq("hotel_id", hotelId).eq("active", true).order("name"),
   ]);
@@ -220,6 +221,7 @@ export function PosCatalogPage() {
       <div className="xl:col-span-2"><div className="flex items-center gap-2"><WalletCards className="size-5 text-amber-900" /><h2 className="text-lg font-semibold">Menu items · latest recorded prices</h2></div>
         {catalog.data.items.length ? <div className="mt-3 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm"><div className="divide-y divide-stone-100">{catalog.data.items.map((item) => { const category = categories.find((entry) => entry.id === item.category_id); const outlet = catalog.data.outlets.find((entry) => entry.id === item.outlet_id); const price = currentPrices.get(item.id); const assignedGroups = catalog.data.assignments.filter((assignment) => assignment.menu_item_id === item.id).map((assignment) => ({ assignment, name: catalog.data.groups.find((group) => group.id === assignment.modifier_group_id)?.name ?? "Modifier group" })); return <article key={item.id} className="flex flex-wrap items-center justify-between gap-3 p-4"><div className="min-w-[12rem] flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{item.name}</h3><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${item.active ? "bg-emerald-50 text-emerald-800" : "bg-stone-100 text-stone-600"}`}>{item.active ? "Active" : "Retired"}</span></div><p className="mt-1 text-sm text-stone-500">{outlet?.name} · {category?.name} · {item.code}</p>{assignedGroups.length > 0 && <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-stone-500">{assignedGroups.map(({ assignment, name }) => <li key={assignment.modifier_group_id} className="inline-flex items-center gap-1">{name}<button type="button" onClick={() => setUnassignTarget(assignment)} className="font-semibold text-amber-900 underline underline-offset-2">Remove</button></li>)}</ul>}<div className="mt-3 flex gap-2"><button type="button" onClick={() => setEditTarget({ kind: "item", record: item, mode: "edit" })} className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium hover:bg-stone-50">Edit item</button><button type="button" onClick={() => setEditTarget({ kind: "item", record: item, mode: "status" })} className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium hover:bg-stone-50">{item.active ? "Retire item" : "Reactivate item"}</button></div></div><p className="font-semibold text-stone-900">{price ? formatNaira(price.amount_kobo) : "No price"}<span className="ml-2 text-xs font-normal text-stone-500">{price?.effective_from ? `from ${price.effective_from}` : ""}</span></p></article>; })}</div></div> : <div className="mt-3"><EmptyState>Create an outlet and category, then add menu items.</EmptyState></div>}
       </div>
+      <div className="xl:col-span-2"><PosStockMapping hotelId={hotel.data.id} menuItems={catalog.data.items} modifierOptions={catalog.data.options} outlets={catalog.data.outlets} /></div>
       <FormCard title="Schedule a new price" busy={busy} submitLabel="Add price period" onSubmit={(event) => submit(event, (form) => rpc("set_pos_menu_item_price", { target_menu_item_id: form.get("item"), new_price_kobo: nairaToKobo(String(form.get("price"))), effective_from_value: form.get("effectiveFrom") }), "Price period added. Earlier prices remain unchanged.")}>
         <Label>Menu item<select className={fieldClass} name="item" required defaultValue=""><option value="" disabled>Select an item</option>{itemOptions}</select></Label>
         <div className="grid gap-3 sm:grid-cols-2"><Label>New price (₦)<input className={fieldClass} name="price" required type="number" min="0.01" step="0.01" /></Label><Label>Effective from<input className={fieldClass} name="effectiveFrom" required type="date" /></Label></div>

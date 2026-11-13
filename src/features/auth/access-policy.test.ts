@@ -115,6 +115,8 @@ describe("role navigation policy", () => {
   it("limits inventory and supplier operations to Owner, GM, and Storekeeper", () => {
     expect(canRoleAccess(["storekeeper"], "inventory")).toBe(true);
     expect(canRoleAccess(["general_manager"], "inventory")).toBe(true);
+    expect(canRoleAccess(["managing_director"], "inventory")).toBe(true);
+    expect(canRoleAccess(["managing_director"], "staff")).toBe(true);
     expect(canRoleAccess(["owner"], "inventory")).toBe(true);
     expect(canRoleAccess(["accountant"], "inventory")).toBe(false);
     expect(canRoleAccess(["restaurant_staff"], "inventory")).toBe(false);

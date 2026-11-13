@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { DoorOpen, Plus, Search, TriangleAlert } from "lucide-react";
 
 import { Modal } from "@/components/shared/modal";
+import { useAccess } from "@/features/auth/use-access";
 import {
   EmptyState,
   PageError,
@@ -29,6 +30,7 @@ function localIsoDate() {
 }
 
 export function StaysPage() {
+  const { roleCodes } = useAccess();
   const hotel = useActiveHotel();
   const reservations = useReservations(hotel.data?.id);
   const rooms = useRoomBoard(hotel.data?.id);
@@ -431,7 +433,7 @@ export function StaysPage() {
             </select>
           </label>
           <label className="text-sm text-stone-600">
-            Reception discount
+            {roleCodes.includes("receptionist") ? "Discount" : "Management discount"}
             <select
               name="discountRate"
               value={walkInDiscount}
@@ -439,10 +441,12 @@ export function StaysPage() {
               className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2.5"
             >
               <option value="0">No discount</option>
-              <option value="5">5% discount</option>
-              <option value="10">10% discount</option>
-              <option value="15">15% discount</option>
-              <option value="20">20% discount</option>
+              {!roleCodes.includes("receptionist") && <>
+                <option value="5">5% discount</option>
+                <option value="10">10% discount</option>
+                <option value="15">15% discount</option>
+                <option value="20">20% discount</option>
+              </>}
             </select>
           </label>
           <p className="rounded-lg bg-stone-50 p-3 text-sm text-stone-600">
@@ -461,8 +465,9 @@ export function StaysPage() {
             </span>
           </p>
           <p className="text-xs text-stone-500">
-            A walk-in discount above 20% must be prepared and approved as a
-            reservation before check-in.
+            {roleCodes.includes("receptionist")
+              ? "For any discount, first create a reservation and get independent GM or MD approval. Then check the guest in from that reservation."
+              : "A walk-in discount above 20% must be prepared and approved as a reservation before check-in."}
           </p>
           <label className="text-sm text-stone-600">
             Check-in
