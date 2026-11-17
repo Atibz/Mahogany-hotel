@@ -113,7 +113,7 @@ export function RoomsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const canManageRooms =
-    roleCodes.includes("owner") || roleCodes.includes("general_manager");
+    roleCodes.includes("owner") || roleCodes.includes("general_manager") || roleCodes.includes("accountant");
   const canMoveGuests =
     canManageRooms || roleCodes.includes("receptionist");
 

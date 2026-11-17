@@ -94,7 +94,7 @@ export function BusinessAccountsPage() {
   const [statementAccountId, setStatementAccountId] = useState("");
   const [statementFromDate, setStatementFromDate] = useState("");
   const [statementToDate, setStatementToDate] = useState("");
-  const canManage = access.roleCodes.some((role) => role === "owner" || role === "general_manager");
+  const canManage = access.roleCodes.some((role) => role === "owner" || role === "general_manager" || role === "accountant");
   const canSettle = access.roleCodes.some((role) => role === "owner" || role === "accountant");
   const canVerify = access.roleCodes.some((role) => role === "owner" || role === "general_manager" || role === "accountant");
   const accounts = useQuery({

@@ -14,6 +14,7 @@ describe("private owner day-close summary", () => {
     }, {
       outlet_collections: [{ business: "restaurant", collected_kobo: 5000000 }],
       paid_expenses: [{ business: "hotel", amount_kobo: 2000000 }], reconciliation_status: "approved",
+      self_reviews: [{ action: "expense.approved", record_count: 2 }],
     });
     expect(report.subject).toContain("2026-10-26");
     expect(report.text).toContain("HOTEL REVENUE POSTED (not cash received)");
@@ -21,6 +22,7 @@ describe("private owner day-close summary", () => {
     expect(report.text).toContain("EXPENSES PAID ON THIS DATE (by business)");
     expect(report.text).toContain("non-zero cash variances: 1");
     expect(report.text).toContain("These are separate businesses, not hotel room revenue.");
+    expect(report.text).toContain("Accountant self-reviews: 2");
     expect(report.text).not.toContain("guest_name");
   });
 });

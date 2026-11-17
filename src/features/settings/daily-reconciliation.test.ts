@@ -28,7 +28,7 @@ describe("daily reconciliation interface", () => {
     expect(html).toContain('value="2026-10-19"');
     expect(html).toContain('href="/payments"');
     expect(html).toContain('href="/expenses"');
-    expect(html).toContain("Submit for independent review");
+    expect(html).toContain("Submit for review");
     expect(html).toContain("Hotel drawer");
     expect(html).toContain("Create funding account");
     expect(html).not.toContain("Approve snapshot");
@@ -41,8 +41,16 @@ describe("daily reconciliation interface", () => {
     expect(html).toContain("Count sheet");
     expect(html).toContain('<fieldset disabled=""');
     expect(html).toContain("Approve snapshot");
-    expect(html).not.toContain("Submit for independent review");
+    expect(html).not.toContain("Submit for review");
     expect(html).not.toContain("Create funding account");
+  });
+
+  it("allows the accountant to review their own signed submission", () => {
+    harness.data!.history = [signed()];
+    const html = render();
+    expect(html).toContain("Accountant self-review is flagged");
+    expect(html).toContain("Approve snapshot");
+    expect(html).toContain('<fieldset>');
   });
 
   it("flags source changes while preserving the signed figures", () => {

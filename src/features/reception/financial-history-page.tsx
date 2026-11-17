@@ -18,6 +18,7 @@ import {
   PageLoading,
 } from "@/components/shared/page-state";
 import { useAccess } from "@/features/auth/use-access";
+import { useAuth } from "@/features/auth/auth-provider";
 import { formatNaira, nairaToKobo } from "@/lib/money";
 
 import {
@@ -41,6 +42,7 @@ import {
 } from "./reception-service";
 import { FolioPaymentHistory } from "./folio-payment-history";
 import { CombinedOutletSettlement } from "./combined-outlet-settlement";
+import { BusinessDateSummary } from "./business-date-summary";
 import {
   useActiveHotel,
   useAllPaymentMethods,
@@ -422,18 +424,19 @@ function DepositLiabilitySection({
 export function FinancialHistoryPage() {
   const hotel = useActiveHotel();
   const folios = useFolios(hotel.data?.id);
+  const { session } = useAuth();
   const { roleCodes, isLoading: accessLoading } = useAccess();
   const canOperateCashierShift = roleCodes.some((role) =>
-    ["owner", "general_manager", "cashier"].includes(role),
+    ["owner", "general_manager", "cashier", "accountant"].includes(role),
   );
   const canVerifyPayments = roleCodes.some((role) =>
     ["owner", "general_manager", "accountant"].includes(role),
   );
   const canManagePaymentMethods = roleCodes.some((role) =>
-    ["owner", "general_manager"].includes(role),
+    ["owner", "general_manager", "accountant"].includes(role),
   );
   const canApproveFinance = roleCodes.some((role) =>
-    ["owner", "general_manager"].includes(role),
+    ["owner", "general_manager", "accountant"].includes(role),
   );
   const canViewFinanceRequests = roleCodes.some((role) =>
     ["owner", "general_manager", "accountant", "cashier"].includes(role),
@@ -451,7 +454,7 @@ export function FinancialHistoryPage() {
     ["owner", "general_manager", "accountant"].includes(role),
   );
   const canReviewShifts = roleCodes.some((role) =>
-    ["owner", "general_manager"].includes(role),
+    ["owner", "general_manager", "accountant"].includes(role),
   );
   const [reportDate, setReportDate] = useState("");
   const [approvalFromDate, setApprovalFromDate] = useState("");
@@ -1154,6 +1157,16 @@ export function FinancialHistoryPage() {
 
       {financeView === "reports" && canReadFinanceReports && (
         <div id="finance-reports" className="scroll-mt-6">
+          {canReadReconciliation && (
+            <BusinessDateSummary
+              hotelId={hotel.data.id}
+              hotelName={hotel.data.trading_name}
+              selectedDate={reportDate}
+              revenue={revenueTaxReport.data ?? { departments: [], taxes: [] }}
+              payments={reconciliation.data ?? []}
+              shifts={shiftHistory.data ?? []}
+            />
+          )}
           <DailyRevenueTaxSection report={revenueTaxReport.data} />
           <DepositLiabilitySection
             liabilities={depositLiabilities.data ?? []}
@@ -1263,8 +1276,8 @@ export function FinancialHistoryPage() {
           </h2>
           <p className="mt-1 text-sm text-amber-900">
             {canApproveFinance
-              ? "Approve only requests created by someone else. Approval and execution are separately recorded."
-              : "Your financial correction requests remain here until an independent GM decides them."}
+              ? "Approval and execution are separately recorded. Accountant self-approval is flagged in the audit trail."
+              : "Your financial correction requests remain here until management decides them."}
           </p>
           {financeApprovals.data?.length ? (
             <div className="mt-4 space-y-3">
@@ -1306,7 +1319,7 @@ export function FinancialHistoryPage() {
                       </p>
                     )}
                   </div>
-                  {canApproveFinance && (
+                  {canApproveFinance && (request.requested_by !== session?.user.id || roleCodes.includes("accountant")) && (
                     <div className="flex gap-2">
                       {request.status === "pending" && (
                         <>
@@ -2033,6 +2046,11 @@ export function FinancialHistoryPage() {
       >
         {financeDecisionAction && (
           <form onSubmit={submitFinanceDecision} className="grid gap-4">
+            {financeDecisionAction.request.requested_by === session?.user.id && (
+              <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                You are deciding your own request. Only the accountant may do this, and it will be flagged in the audit trail.
+              </p>
+            )}
             <p className="text-sm text-stone-600">
               {financeDecisionAction.approve
                 ? "Confirm the reason and evidence. You will execute the correction separately after approving it."
@@ -2040,6 +2058,7 @@ export function FinancialHistoryPage() {
             </p>
             <textarea
               required
+              minLength={3}
               name="note"
               rows={4}
               placeholder={

@@ -7,6 +7,7 @@ const receptionist = "20000000-0000-4000-8000-000000000091";
 const md = "20000000-0000-4000-8000-000000000092";
 const gm = "20000000-0000-4000-8000-000000000093";
 const owner = "20000000-0000-4000-8000-000000000094";
+const accountant = "20000000-0000-4000-8000-000000000095";
 const guest = "30000000-0000-4000-8000-000000000091";
 const roomType = "40000000-0000-4000-8000-000000000091";
 const room = "50000000-0000-4000-8000-000000000091";
@@ -36,11 +37,13 @@ describe("Managing Director and reception discount control", () => {
         ('${receptionist}','{"full_name":"Reception Test"}'),
         ('${md}','{"full_name":"MD Test"}'),
         ('${gm}','{"full_name":"GM Test"}'),
-        ('${owner}','{"full_name":"Owner Test"}');
+        ('${owner}','{"full_name":"Owner Test"}'),
+        ('${accountant}','{"full_name":"Accountant Test"}');
       insert into public.user_roles(profile_id,role_id)
         select v.id::uuid,r.id from (values
           ('${receptionist}','receptionist'),('${md}','managing_director'),
-          ('${gm}','general_manager'),('${owner}','owner')) v(id,code)
+          ('${gm}','general_manager'),('${owner}','owner'),
+          ('${accountant}','accountant')) v(id,code)
           join public.roles r on r.hotel_id='${hotel}' and r.code=v.code;
       insert into public.room_types(id,hotel_id,name,base_rate_kobo,capacity)
         values ('${roomType}','${hotel}','Standard',10000,2);
@@ -61,6 +64,33 @@ describe("Managing Director and reception discount control", () => {
     await as(md);
     expect((await db.query("select public.has_hotel_permission($1,'finance_approvals.approve') as allowed", [hotel])).rows[0].allowed).toBe(true);
     expect((await db.query("select public.has_hotel_permission($1,'owner') as allowed", [hotel])).rows[0].allowed).toBe(false);
+  });
+
+  it("gives the accountant operational authority without night-audit run or Owner visibility", async () => {
+    await as(accountant);
+    for (const code of ["staff.manage", "reservations.manage", "inventory.manage", "finance_approvals.approve", "expenses.review"]) {
+      expect((await db.query("select public.has_hotel_permission($1,$2) as allowed", [hotel, code])).rows[0].allowed).toBe(true);
+    }
+    expect((await db.query("select public.has_hotel_permission($1,'night_audit.run') as allowed", [hotel])).rows[0].allowed).toBe(false);
+    expect((await db.query("select public.has_hotel_permission($1,'owner') as allowed", [hotel])).rows[0].allowed).toBe(false);
+    expect((await db.query("select id from public.profiles where id=$1", [owner])).rows).toHaveLength(0);
+    expect((await db.query("select id from public.roles where hotel_id=$1 and code='owner'", [hotel])).rows).toHaveLength(0);
+    await fails(() => db.query("select public.set_staff_active($1,false)", [md]), /Only the hotel owner/);
+  });
+
+  it("allows an accountant to decide their own finance request with an audit marker", async () => {
+    const inserted = await admin(`insert into public.finance_approval_requests
+      (hotel_id,action_type,target_entity_type,target_entity_id,payload,reason,requested_by)
+      values ($1,'reservation_discount','reservation',$2,'{}','Documented test request',$3)
+      returning id`, [hotel, guest, accountant]);
+    const id = inserted.rows[0].id;
+    await as(accountant);
+    await db.query("select public.decide_finance_approval($1,true,$2)", [id, "Evidence and requested amount checked"]);
+    const result = await admin("select status, requested_by, decided_by from public.finance_approval_requests where id=$1", [id]);
+    expect(result.rows[0]).toMatchObject({ status: "approved", requested_by: accountant, decided_by: accountant });
+    const log = await admin(`select metadata->>'self_review' as self_review from public.activity_logs
+      where entity_type='finance_approval_request' and entity_id=$1 and action='finance_approval.approved'`, [id]);
+    expect(log.rows[0]?.self_review).toBe("true");
   });
 
   it("prevents GM account and role changes to the MD while allowing the Owner", async () => {

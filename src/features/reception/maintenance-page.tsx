@@ -55,7 +55,7 @@ export function MaintenancePage() {
   const [statusFilter, setStatusFilter] = useState("active");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const canManage =
-    roleCodes.includes("owner") || roleCodes.includes("general_manager");
+    roleCodes.includes("owner") || roleCodes.includes("general_manager") || roleCodes.includes("accountant");
   const roomListUnavailable = Boolean(rooms.error);
   const refreshTickets = () =>
     queryClient.invalidateQueries({

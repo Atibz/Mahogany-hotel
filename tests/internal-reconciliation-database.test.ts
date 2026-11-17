@@ -135,6 +135,17 @@ describe("daily reconciliation database", () => {
     expect((await source("2000-01-09")).accounts.find((a) => a.id === hotelCash)?.expenses_kobo).toBe(0);
   });
 
+  it("permits accountant self-review of an already-paid expense and records the exception", async () => {
+    await as(accountant);
+    const id = await rpc<string>("submit_operating_expense", [hotel, "hotel", "Supplies", "Paid office supplies", "Supplier", 12000, "Cash", "Receipt-SELF", "2000-01-09"]);
+    await rpc("review_operating_expense", [id, "approved", "Checked original supplier receipt"]);
+    const reviewed = await admin("select status, submitted_by, reviewed_by from public.operating_expenses where id=$1", [id]);
+    expect(reviewed.rows[0]).toMatchObject({ status: "approved", submitted_by: accountant, reviewed_by: accountant });
+    const log = await admin(`select metadata->>'self_review' as self_review from public.activity_logs
+      where entity_type='operating_expense' and entity_id=$1 and action='expense.approved'`, [id]);
+    expect(log.rows[0]?.self_review).toBe("true");
+  });
+
   it("keeps POS refunds on the payout date and in the originating outlet business line", async () => {
     await admin(`
       insert into public.pos_orders(id,hotel_id,outlet_id,order_number,business_date,service_mode,outlet_name_snapshot,department_code_snapshot)
@@ -249,8 +260,20 @@ describe("daily reconciliation database", () => {
 
   it("prevents a GM from reviewing their own submission", async () => {
     await as(manager); const id = await submit(await source());
-    await fails(() => rpc("review_internal_daily_reconciliation", [id, "approved", "Self review"]), /submitter cannot review/);
-    await fails(() => rpc("review_internal_daily_reconciliation", [id, "rejected", "Self rejection"]), /submitter cannot review/);
+    await fails(() => rpc("review_internal_daily_reconciliation", [id, "approved", "Self review"]), /Only the accountant may review their own reconciliation/);
+    await fails(() => rpc("review_internal_daily_reconciliation", [id, "rejected", "Self rejection"]), /Only the accountant may review their own reconciliation/);
+  });
+
+  it("allows accountant self-review with an audit marker", async () => {
+    await as(accountant); const id = await submit(await source());
+    await rpc("review_internal_daily_reconciliation", [id, "approved", "Checked against cash count evidence"]);
+    const signed = (await report()).history.find((record) => record.id === id);
+    expect(signed?.status).toBe("approved");
+    expect(signed?.reviewed_by).toBe(accountant);
+    const logged = await admin(`select metadata->>'self_review' = 'true' as value
+      from public.activity_logs where entity_type = 'internal_daily_reconciliation' and entity_id = $1
+      and action = 'internal_reconciliation.approved' order by occurred_at desc limit 1`, [id]);
+    expect(logged.rows[0]?.value).toBe(true);
   });
 
   it("carries prior approved closing balances and permits evidence-based corrections to actual counts", async () => {

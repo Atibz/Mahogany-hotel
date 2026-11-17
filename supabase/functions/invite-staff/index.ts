@@ -46,7 +46,7 @@ Deno.serve(async (request) => {
     .maybeSingle();
   if (
     !role ||
-    (role.code === "owner" &&
+    (["owner", "managing_director"].includes(role.code) &&
       !(
         await caller.rpc("has_hotel_permission", {
           target_hotel_id: hotelId,

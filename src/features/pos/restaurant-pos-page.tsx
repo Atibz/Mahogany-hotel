@@ -196,7 +196,7 @@ export function RestaurantPosPage({ outletType = "restaurant" }: { outletType?: 
   const departmentName = outletType === "bar" ? "Bar" : "Restaurant";
   const workspace = useQuery({ queryKey: ["restaurant-pos", outletType, hotel.data?.id], queryFn: () => loadWorkspace(hotel.data!.id, outletType), enabled: Boolean(hotel.data?.id), refetchInterval: 30_000 });
   const data = workspace.data;
-  const canSell = access.roleCodes.some((role) => ["owner", "general_manager", outletType === "bar" ? "bar_staff" : "restaurant_staff"].includes(role));
+  const canSell = access.roleCodes.some((role) => ["owner", "general_manager", "accountant", outletType === "bar" ? "bar_staff" : "restaurant_staff"].includes(role));
   const canVerify = access.roleCodes.some((role) => ["owner", "general_manager", "accountant"].includes(role));
   const canRequestRefund = access.roleCodes.some((role) => ["owner", "general_manager", "accountant"].includes(role));
   const canRequestCorrection = canRequestRefund || canSell;

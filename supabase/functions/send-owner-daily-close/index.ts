@@ -104,7 +104,11 @@ Deno.serve(async (request) => {
       target_hotel_id: job.hotel_id, target_date: close.business_date,
     });
     if (movementsError || !movements) return await retry("Private daily movements are unavailable");
-    const report = buildOwnerDailyCloseEmail(close.snapshot, movements);
+    const { data: selfReviews, error: selfReviewsError } = await admin.rpc("get_owner_private_self_reviews", {
+      target_hotel_id: job.hotel_id, target_date: close.business_date,
+    });
+    if (selfReviewsError || !selfReviews) return await retry("Private self-review summary is unavailable");
+    const report = buildOwnerDailyCloseEmail(close.snapshot, { ...movements, self_reviews: selfReviews });
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json", "Idempotency-Key": `owner-day-close/${close.id}` },

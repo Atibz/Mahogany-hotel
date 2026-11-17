@@ -52,7 +52,7 @@ export function DailyReconciliation({ hotelId }: { hotelId: string }) {
     },
   });
   const canSubmit = access.roleCodes.some((r) => ["owner", "general_manager", "accountant"].includes(r));
-  const canReview = access.roleCodes.some((r) => ["owner", "general_manager"].includes(r));
+  const canReview = access.roleCodes.some((r) => ["owner", "general_manager", "accountant"].includes(r));
   const run: RunAction = async (name, args) => {
     if (!supabase || busy) return false;
     setBusy(true); setNotice(null);
@@ -74,7 +74,7 @@ export function DailyReconciliation({ hotelId }: { hotelId: string }) {
 
   return <section className="space-y-4 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5" aria-label="Daily internal reconciliation">
     <div className="flex flex-wrap items-end justify-between gap-3">
-      <div><h2 className="text-xl font-semibold">Daily reconciliation</h2><p className="mt-1 text-sm text-stone-600">Match expected money to a cash count or bank settlement, then obtain independent sign-off.</p></div>
+      <div><h2 className="text-xl font-semibold">Daily reconciliation</h2><p className="mt-1 text-sm text-stone-600">Match expected money to a cash count or bank settlement, then record a documented review.</p></div>
       <div className="flex items-end gap-2"><label className="text-xs text-stone-600">Business date<input type="date" aria-label="Daily reconciliation business date" className={`${inputClass} mt-1`} value={date || report.data?.source.business_date || ""} max={report.data?.current_business_date} disabled={busy} onChange={(e) => { setDate(e.target.value); setNotice(null); }} /></label>
         <button className={buttonClass} disabled={busy || report.isFetching} onClick={() => void report.refetch()} aria-label="Refresh daily reconciliation"><RefreshCw className={`size-4 ${report.isFetching ? "animate-spin" : ""}`} /></button></div>
     </div>
@@ -83,12 +83,12 @@ export function DailyReconciliation({ hotelId }: { hotelId: string }) {
     {notice && <p role={notice.error ? "alert" : "status"} className={`rounded-lg p-3 text-sm ${notice.error ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>{notice.message}</p>}
     {report.isLoading && <p className="text-sm text-stone-500">Loading daily evidence…</p>}
     {(report.error || access.error) && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{errorMessage(report.error ?? access.error)}</p>}
-    {report.data && <ReconciliationWorkspace key={`${hotelId}:${report.data.source.business_date}`} data={report.data} hotelId={hotelId} userId={session?.user.id} canSubmit={canSubmit} canReview={canReview} busy={busy || access.isLoading || Boolean(report.error)} run={run} />}
+    {report.data && <ReconciliationWorkspace key={`${hotelId}:${report.data.source.business_date}`} data={report.data} hotelId={hotelId} userId={session?.user.id} canSubmit={canSubmit} canReview={canReview} canAccountantSelfReview={access.roleCodes.includes("accountant")} busy={busy || access.isLoading || Boolean(report.error)} run={run} />}
   </section>;
 }
 
-function ReconciliationWorkspace({ data, hotelId, userId, canSubmit, canReview, busy, run }: {
-  data: DailyData; hotelId: string; userId?: string; canSubmit: boolean; canReview: boolean; busy: boolean; run: RunAction;
+function ReconciliationWorkspace({ data, hotelId, userId, canSubmit, canReview, canAccountantSelfReview, busy, run }: {
+  data: DailyData; hotelId: string; userId?: string; canSubmit: boolean; canReview: boolean; canAccountantSelfReview: boolean; busy: boolean; run: RunAction;
 }) {
   const [view, setView] = useState("latest");
   const pending = data.history.find((r) => r.status === "submitted");
@@ -104,13 +104,13 @@ function ReconciliationWorkspace({ data, hotelId, userId, canSubmit, canReview, 
       <option value="latest">{active ? `Current ${active.status} snapshot` : "Live records"}</option><option value="live">Live records</option>
       {data.history.map((r) => <option key={r.id} value={r.id}>{r.status} · {new Date(r.submitted_at).toLocaleString()} · {r.id.slice(0, 8)}</option>)}
     </select></label><button className={`${buttonClass} flex items-center gap-2`} onClick={() => download(source, record)}><Download className="size-4" />Export {record ? "snapshot" : "live preview"}</button></div>
-    {record && <div className="rounded-xl border border-stone-200 p-3 text-sm leading-6"><p className="font-semibold capitalize">{record.status} · {record.business_date}</p><p>Submitted {new Date(record.submitted_at).toLocaleString()} · Staff ID {record.submitted_by}</p>{record.reviewed_at && <p>Reviewed {new Date(record.reviewed_at).toLocaleString()} · Staff ID {record.reviewed_by}</p>}{record.review_note && <p>Review: {record.review_note}</p>}{record.exception_note && <p>Exceptions: {record.exception_note}</p>}</div>}
+    {record && <div className="rounded-xl border border-stone-200 p-3 text-sm leading-6"><p className="font-semibold capitalize">{record.status} · {record.business_date}{record.reviewed_by && record.reviewed_by === record.submitted_by ? " · Self-reviewed" : ""}</p><p>Submitted {new Date(record.submitted_at).toLocaleString()} · Staff ID {record.submitted_by}</p>{record.reviewed_at && <p>Reviewed {new Date(record.reviewed_at).toLocaleString()} · Staff ID {record.reviewed_by}</p>}{record.review_note && <p>Review: {record.review_note}</p>}{record.exception_note && <p>Exceptions: {record.exception_note}</p>}</div>}
     {changed && <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Source records have changed since this snapshot. {record.status === "submitted" ? "Reject this submission and prepare a new one before approval." : "The signed snapshot remains preserved. Select Live records to investigate the changes."}</p>}
-    {active && !record && <p className="text-sm text-stone-600">This date has a {active.status} reconciliation. {pending ? "Reject the pending submission before making corrections." : "Explain any correction and submit the revised figures for independent approval. Earlier signed versions remain preserved."}</p>}
+    {active && !record && <p className="text-sm text-stone-600">This date has a {active.status} reconciliation. {pending ? "Reject the pending submission before making corrections." : "Explain any correction and submit the revised figures for documented review. Earlier signed versions remain preserved."}</p>}
     <div className="rounded-xl border border-stone-200 p-3"><h3 className="font-semibold">Checks before submission</h3><ul className="mt-2 space-y-1 text-sm">{Object.entries(source.blockers).map(([key, count]) => <li key={key} className={count ? "text-red-800" : "text-emerald-800"}>{blockerLabels[key] ?? key}: {count}</li>)}</ul></div>
     {(source.hotel_collected_for_outlets_kobo ?? 0) > 0 && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">Of the hotel's recorded collections, {formatNaira(source.hotel_collected_for_outlets_kobo)} was received on behalf of independent restaurant/bar businesses. This is not hotel room revenue and must not be counted again as an outlet tender. Document its settlement separately.</p>}
     <AccountDeclarations key={record?.id ?? `draft:${source.accounts.map((a) => `${a.id}:${a.previous_closing_kobo ?? "none"}`).join()}`} source={source} record={record} hotelId={hotelId} editable={editable} correction={correction} run={run} />
-    {record?.status === "submitted" && <ReviewForm record={record} canReview={canReview && record.submitted_by !== userId} busy={busy} changed={Boolean(changed)} run={run} />}
+    {record?.status === "submitted" && <ReviewForm record={record} canReview={canReview && (record.submitted_by !== userId || canAccountantSelfReview)} busy={busy} changed={Boolean(changed)} run={run} />}
     {!record && canSubmit && <details className="rounded-xl border border-stone-200 p-3"><summary className="cursor-pointer font-semibold">Set up funding accounts and document other movements</summary><p className="mt-2 text-sm text-stone-600">Create one named drawer or settlement account for each business line and payment method used. Other movements record transfers, deposits, or corrections already made outside this app; use a negative amount for money out. Record both sides of an internal transfer. These entries do not move money. Correct mistakes with an opposite entry and a reference to the original.</p><SetupForms hotelId={hotelId} data={data} disabled={Boolean(pending) || busy} run={run} /></details>}
     <SourceEvidence source={source} editable={!record && canSubmit && !pending && !busy} run={run} />
   </div>;
@@ -159,7 +159,7 @@ function AccountDeclarations({ source, record, hotelId, editable, correction, ru
         <label className="block text-xs">Variance explanation<textarea className={`${inputClass} mt-1`} required={variance !== null && variance !== 0} maxLength={500} value={draft.note} onChange={(e) => update(a.id, "note", e.target.value)} /></label>
       </article>;
     })}</fieldset>
-    {!record && <><label className="block text-sm">Exception explanation (required for corrections or rejected paid expenses)<textarea className={`${inputClass} mt-1`} disabled={!editable} maxLength={2000} required={correction || source.expenses.some((e) => e.status === "rejected")} value={exceptionNote} onChange={(e) => setExceptionNote(e.target.value)} /></label>{error && <p role="alert" className="text-sm text-red-800">{error}</p>}<FormSubmitButton className={`${buttonClass} border-amber-900 bg-amber-950 text-white`} disabled={!editable || blocked}>Submit for independent review</FormSubmitButton></>}
+    {!record && <><label className="block text-sm">Exception explanation (required for corrections or rejected paid expenses)<textarea className={`${inputClass} mt-1`} disabled={!editable} maxLength={2000} required={correction || source.expenses.some((e) => e.status === "rejected")} value={exceptionNote} onChange={(e) => setExceptionNote(e.target.value)} /></label>{error && <p role="alert" className="text-sm text-red-800">{error}</p>}<FormSubmitButton className={`${buttonClass} border-amber-900 bg-amber-950 text-white`} disabled={!editable || blocked}>Submit for review</FormSubmitButton></>}
   </form>;
 }
 
@@ -167,7 +167,7 @@ function ReviewForm({ record, canReview, busy, changed, run }: { record: Reconci
   return <form className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3" onSubmit={(e) => {
     const form = formData(e); const decision = (e.nativeEvent as SubmitEvent).submitter?.getAttribute("value");
     if (decision) void run("review_internal_daily_reconciliation", { target_id: record.id, decision_value: decision, note_value: String(form.get("note")) });
-  }}><p className="text-sm">GM review is required. The submitter cannot approve or reject their own reconciliation.</p><fieldset disabled={busy || !canReview}><label className="text-sm">Review note<textarea name="note" className={`${inputClass} mt-1`} required minLength={3} maxLength={2000} /></label><div className="mt-2 flex gap-2"><FormSubmitButton className={buttonClass} value="approved" disabled={changed}>Approve snapshot</FormSubmitButton><FormSubmitButton className={buttonClass} value="rejected">Reject for correction</FormSubmitButton></div></fieldset></form>;
+  }}><p className="text-sm">A review note is required. Accountant self-review is flagged in the audit trail; other roles cannot review their own submission.</p><fieldset disabled={busy || !canReview}><label className="text-sm">Review note<textarea name="note" className={`${inputClass} mt-1`} required minLength={3} maxLength={2000} /></label><div className="mt-2 flex gap-2"><FormSubmitButton className={buttonClass} value="approved" disabled={changed}>Approve snapshot</FormSubmitButton><FormSubmitButton className={buttonClass} value="rejected">Reject for correction</FormSubmitButton></div></fieldset></form>;
 }
 
 function SetupForms({ hotelId, data, disabled, run }: { hotelId: string; data: DailyData; disabled: boolean; run: RunAction }) {

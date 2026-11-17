@@ -49,8 +49,8 @@ export function DailyOperationalChecks({ hotelId, mode = "all" }: { hotelId: str
     : Number(check.expected_quantity) !== Number(check.observed_quantity));
   const checkedRoomIds = new Set(checks.filter((check) => check.kind === "room").map((check) => check.room_id));
   const canSubmitRoom = access.roleCodes.some((role) => ["accountant", "general_manager", "owner"].includes(role));
-  const canSubmitStock = access.roleCodes.some((role) => ["storekeeper", "general_manager", "owner"].includes(role));
-  const canReview = access.roleCodes.some((role) => ["general_manager", "owner"].includes(role));
+  const canSubmitStock = access.roleCodes.some((role) => ["storekeeper", "general_manager", "owner", "accountant"].includes(role));
+  const canReview = access.roleCodes.some((role) => ["general_manager", "owner", "accountant"].includes(role));
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

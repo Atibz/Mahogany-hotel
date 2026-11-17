@@ -40,19 +40,19 @@ export function DashboardPage() {
   const hotel = useActiveHotel();
   const { roleCodes, isLoading: accessLoading } = useAccess();
   const canSeeRoomOverview = roleCodes.some((role) =>
-    ["owner", "general_manager", "receptionist"].includes(role),
+    ["owner", "general_manager", "receptionist", "accountant"].includes(role),
   );
   const canSeeFinancialOverview = roleCodes.some((role) =>
     ["owner", "general_manager", "cashier", "accountant"].includes(role),
   );
   const canRecordPayment = roleCodes.some((role) =>
-    ["owner", "general_manager", "receptionist", "cashier"].includes(role),
+    ["owner", "general_manager", "receptionist", "cashier", "accountant"].includes(role),
   );
   const canSeeManagementSummary = roleCodes.some((role) =>
-    ["owner", "general_manager"].includes(role),
+    ["owner", "general_manager", "accountant"].includes(role),
   );
   const canSeeInventory = roleCodes.some((role) =>
-    ["owner", "general_manager", "storekeeper"].includes(role),
+    ["owner", "general_manager", "storekeeper", "accountant"].includes(role),
   );
   const rooms = useRoomBoard(canSeeRoomOverview ? hotel.data?.id : undefined);
   const arrivals = useArrivalAttention(hotel.data?.id, canSeeRoomOverview);

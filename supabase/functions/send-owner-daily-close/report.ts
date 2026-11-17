@@ -13,6 +13,7 @@ type Movements = {
   outlet_collections?: AmountRow[];
   paid_expenses?: AmountRow[];
   reconciliation_status?: string;
+  self_reviews?: { action: string; record_count: number }[];
 };
 
 const money = (value: number) => new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN" }).format(value / 100);
@@ -54,6 +55,8 @@ export function buildOwnerDailyCloseEmail(snapshot: CloseSnapshot, movements: Mo
     `Folio corrections: ${(snapshot.corrections ?? []).length}; open folios with balance: ${outstanding.length}; balance outstanding: ${money(sum(outstanding.map((folio) => number(folio.balance_kobo))))}.`,
     `Management exception acknowledgements: ${(snapshot.acknowledgements ?? []).length}.`,
     ...(snapshot.acknowledgements ?? []).map((ack) => `${ack.exception_code}: ${ack.record_count} record(s)`),
+    `Accountant self-reviews: ${sum((movements.self_reviews ?? []).map((item) => number(item.record_count)))}.`,
+    ...(movements.self_reviews ?? []).map((item) => `${item.action}: ${item.record_count} self-reviewed record(s)`),
     "",
     "The close figures are the stored day-close snapshot. Separate-business movements and paid expenses reflect records at email send time; check the detailed registers before treating any amount as bank-settled. This message is confidential.",
   ];

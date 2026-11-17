@@ -7,6 +7,7 @@ import { Check, Clock3, Plus, ReceiptText, X } from "lucide-react";
 import { Modal } from "@/components/shared/modal";
 import { EmptyState, PageError, PageLoading } from "@/components/shared/page-state";
 import { useAccess } from "@/features/auth/use-access";
+import { useAuth } from "@/features/auth/auth-provider";
 import { useActiveHotel } from "@/features/reception/use-reception";
 import { formatNaira, nairaToKobo } from "@/lib/money";
 import { supabase } from "@/lib/supabase/client";
@@ -26,6 +27,8 @@ type Expense = {
   evidence_reference: string | null;
   status: "pending_review" | "approved" | "rejected";
   submitted_at: string;
+  submitted_by: string;
+  reviewed_by: string | null;
   review_note: string | null;
 };
 
@@ -47,6 +50,7 @@ const weekAgo = () => { const date = new Date(`${today()}T12:00:00`); date.setDa
 export function OperatingExpensesPage() {
   const hotel = useActiveHotel();
   const access = useAccess();
+  const { session } = useAuth();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [reviewTarget, setReviewTarget] = useState<Expense | null>(null);
@@ -55,14 +59,14 @@ export function OperatingExpensesPage() {
   const [fromDate, setFromDate] = useState(weekAgo);
   const [toDate, setToDate] = useState(today);
   const canSubmit = access.roleCodes.some((role) => ["owner", "general_manager", "accountant"].includes(role));
-  const canReview = access.roleCodes.some((role) => ["owner", "general_manager"].includes(role));
+  const canReview = access.roleCodes.some((role) => ["owner", "general_manager", "accountant"].includes(role));
 
   const expenses = useQuery({
     queryKey: ["operating-expenses", hotel.data?.id],
     enabled: Boolean(supabase && hotel.data?.id),
     queryFn: async () => {
       if (!supabase || !hotel.data) throw new Error("Supabase is not configured.");
-      const { data, error } = await supabase.from("operating_expenses").select("id, expense_number, business_date, incurred_on, department, category, description, payee, amount_kobo, paid_via, evidence_reference, status, submitted_at, review_note").eq("hotel_id", hotel.data.id).order("submitted_at", { ascending: false }).limit(100);
+      const { data, error } = await supabase.from("operating_expenses").select("id, expense_number, business_date, incurred_on, department, category, description, payee, amount_kobo, paid_via, evidence_reference, status, submitted_at, submitted_by, reviewed_by, review_note").eq("hotel_id", hotel.data.id).order("submitted_at", { ascending: false }).limit(100);
       if (error) throw error;
       return (data ?? []) as Expense[];
     },
@@ -74,7 +78,7 @@ export function OperatingExpensesPage() {
     queryFn: async () => loadAllPages<Expense>(async (from, to) => {
       if (!supabase || !hotel.data) throw new Error("Supabase is not configured.");
       const { data, error } = await supabase.from("operating_expenses")
-        .select("id, expense_number, business_date, incurred_on, department, category, description, payee, amount_kobo, paid_via, evidence_reference, status, submitted_at, review_note")
+        .select("id, expense_number, business_date, incurred_on, department, category, description, payee, amount_kobo, paid_via, evidence_reference, status, submitted_at, submitted_by, reviewed_by, review_note")
         .eq("hotel_id", hotel.data.id)
         .eq("status", "pending_review")
         .order("submitted_at", { ascending: false })
@@ -126,7 +130,7 @@ export function OperatingExpensesPage() {
       });
       if (error) throw error;
       formElement.reset(); setShowForm(false);
-      setNotice({ text: "Expense recorded and sent for independent review. No payment was initiated." });
+      setNotice({ text: "Expense recorded for review. No payment was initiated." });
       await refresh();
     } catch (caught) {
       setNotice({ text: caught instanceof Error ? caught.message : "Unable to record this expense.", error: true });
@@ -158,7 +162,7 @@ export function OperatingExpensesPage() {
   return <section className="max-w-6xl space-y-5">
     <header className="rounded-3xl bg-gradient-to-br from-amber-950 via-amber-900 to-orange-800 p-6 text-white shadow-sm sm:p-8">
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">Finance · internal control</p>
-      <div className="mt-2 flex items-start gap-3"><div className="rounded-2xl bg-white/10 p-3"><ReceiptText className="size-6" aria-hidden="true" /></div><div><h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Operating expenses</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-amber-50/85">Record expenses already paid, review them independently, and see totals by department. Money received (collections) is distinct from outstanding receivables.</p></div></div>
+      <div className="mt-2 flex items-start gap-3"><div className="rounded-2xl bg-white/10 p-3"><ReceiptText className="size-6" aria-hidden="true" /></div><div><h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Operating expenses</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-amber-50/85">Record expenses already paid, review them with a documented decision, and see totals by department. Money received (collections) is distinct from outstanding receivables.</p></div></div>
     </header>
 
     <aside className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950"><p className="font-semibold">Internal expense register only</p><p className="mt-1">Submitting records a payment that has already happened. Approval is a review decision—not a payment instruction, accounting journal, tax calculation, or automatic deduction from receivables or POS collections. Hotel, Restaurant, and Bar stay in separate totals.</p></aside>
@@ -184,17 +188,17 @@ export function OperatingExpensesPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 sm:col-span-2 lg:col-span-3"><p className="text-xs leading-5 text-stone-500">Supporting documents are not uploaded here. Keep the original receipt/invoice and use its reference above.</p><FormSubmitButton type="submit" disabled={busy} className="rounded-xl bg-amber-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Saving…" : "Submit for review"}</FormSubmitButton></div>
       </form>}</section>}
 
-    {canReview && <section className="rounded-2xl border border-orange-200 bg-orange-50/60 p-4 sm:p-5"><div className="flex items-center gap-2"><Clock3 className="size-5 text-orange-800" /><div><h2 className="text-lg font-semibold">Needs your review</h2><p className="text-sm text-stone-600">You cannot approve an expense you submitted.</p></div><span className="ml-auto rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-900">{pending.length} pending</span></div>{pending.length ? <div className="mt-3 space-y-2">{pending.map((expense) => <ExpenseRow key={expense.id} expense={expense} onReview={() => setReviewTarget(expense)} canReview />)}</div> : <p className="mt-3 rounded-xl bg-white/70 p-4 text-sm text-stone-600">No expenses are waiting for review.</p>}</section>}
+    {canReview && <section className="rounded-2xl border border-orange-200 bg-orange-50/60 p-4 sm:p-5"><div className="flex items-center gap-2"><Clock3 className="size-5 text-orange-800" /><div><h2 className="text-lg font-semibold">Needs your review</h2><p className="text-sm text-stone-600">Accountant self-review is allowed and marked in the audit trail. Other roles cannot review their own submissions.</p></div><span className="ml-auto rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-900">{pending.length} pending</span></div>{pending.length ? <div className="mt-3 space-y-2">{pending.map((expense) => <ExpenseRow key={expense.id} expense={expense} onReview={() => setReviewTarget(expense)} canReview={expense.submitted_by !== session?.user.id || access.roleCodes.includes("accountant")} />)}</div> : <p className="mt-3 rounded-xl bg-white/70 p-4 text-sm text-stone-600">No expenses are waiting for review.</p>}</section>}
 
     <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5"><h2 className="text-lg font-semibold">Recent expense records</h2><p className="text-sm text-stone-500">Latest 100 entries · reviewed records are retained in history.</p><div className="mt-3 space-y-2">{expenses.data.map((expense) => <ExpenseRow key={expense.id} expense={expense} />)}{expenses.data.length === 0 && <EmptyState>No expense records yet.</EmptyState>}</div></section>
 
     <Modal open={Boolean(reviewTarget)} title="Review expense" onClose={() => { if (!busy) setReviewTarget(null); }}>
-      {reviewTarget && <form className="space-y-4" onSubmit={(event) => void reviewExpense(event)}><div className="rounded-xl bg-stone-50 p-4 text-sm"><p className="font-semibold">{reviewTarget.expense_number} · {departmentNames[reviewTarget.department]}</p><p className="mt-1">{reviewTarget.description}</p><p className="mt-1 text-stone-600">{reviewTarget.payee} · {reviewTarget.category}</p><p className="mt-2 text-lg font-semibold">{formatNaira(reviewTarget.amount_kobo)}</p><p className="mt-1 text-xs text-stone-500">Paid via {reviewTarget.paid_via}{reviewTarget.evidence_reference ? ` · Evidence: ${reviewTarget.evidence_reference}` : " · No evidence reference"}</p></div><label className="block text-sm font-medium">Review note (required)<textarea name="reviewNote" required minLength={3} maxLength={500} rows={3} className={`${fieldClass} mt-1`} placeholder="Explain your decision or note any follow-up needed." /></label><div className="flex flex-wrap justify-end gap-2"><FormSubmitButton type="submit" value="rejected" disabled={busy} className="rounded-xl border border-red-300 px-4 py-2.5 text-sm font-semibold text-red-800 disabled:opacity-50">Reject</FormSubmitButton><FormSubmitButton type="submit" value="approved" disabled={busy} className="inline-flex items-center gap-2 rounded-xl bg-emerald-800 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><Check className="size-4" />{busy ? "Saving…" : "Approve"}</FormSubmitButton></div></form>}
+      {reviewTarget && <form className="space-y-4" onSubmit={(event) => void reviewExpense(event)}><div className="rounded-xl bg-stone-50 p-4 text-sm"><p className="font-semibold">{reviewTarget.expense_number} · {departmentNames[reviewTarget.department]}</p><p className="mt-1">{reviewTarget.description}</p><p className="mt-1 text-stone-600">{reviewTarget.payee} · {reviewTarget.category}</p><p className="mt-2 text-lg font-semibold">{formatNaira(reviewTarget.amount_kobo)}</p><p className="mt-1 text-xs text-stone-500">Paid via {reviewTarget.paid_via}{reviewTarget.evidence_reference ? ` · Evidence: ${reviewTarget.evidence_reference}` : " · No evidence reference"}</p></div>{reviewTarget.submitted_by === session?.user.id && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">You are reviewing your own submission. This will be flagged as a self-review in the audit trail.</p>}<label className="block text-sm font-medium">Review note (required)<textarea name="reviewNote" required minLength={3} maxLength={500} rows={3} className={`${fieldClass} mt-1`} placeholder="Explain your decision or note any follow-up needed." /></label><div className="flex flex-wrap justify-end gap-2"><FormSubmitButton type="submit" value="rejected" disabled={busy} className="rounded-xl border border-red-300 px-4 py-2.5 text-sm font-semibold text-red-800 disabled:opacity-50">Reject</FormSubmitButton><FormSubmitButton type="submit" value="approved" disabled={busy} className="inline-flex items-center gap-2 rounded-xl bg-emerald-800 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><Check className="size-4" />{busy ? "Saving…" : "Approve"}</FormSubmitButton></div></form>}
     </Modal>
   </section>;
 }
 
 function ExpenseRow({ expense, onReview, canReview = false }: { expense: Expense; onReview?: () => void; canReview?: boolean }) {
   const color = expense.status === "approved" ? "bg-emerald-50 text-emerald-800" : expense.status === "rejected" ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-900";
-  return <article className="flex flex-col gap-3 rounded-xl border border-stone-200 p-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{expense.expense_number}</h3><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${color}`}>{statusNames[expense.status]}</span><span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs text-stone-700">{departmentNames[expense.department]}</span></div><p className="mt-1 text-sm">{expense.description}</p><p className="mt-1 text-xs text-stone-500">{expense.category} · {expense.payee} · Paid via {expense.paid_via} · Incurred {expense.incurred_on}</p>{expense.evidence_reference && <p className="mt-1 text-xs text-stone-500">Evidence: {expense.evidence_reference}</p>}{expense.review_note && <p className="mt-2 rounded-lg bg-stone-50 p-2 text-xs text-stone-600">Review note: {expense.review_note}</p>}</div><div className="flex shrink-0 items-center justify-between gap-3 sm:flex-col sm:items-end"><b>{formatNaira(expense.amount_kobo)}</b>{canReview && onReview && expense.status === "pending_review" && <button type="button" onClick={onReview} className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-semibold hover:bg-stone-50">Review</button>}</div></article>;
+  return <article className="flex flex-col gap-3 rounded-xl border border-stone-200 p-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{expense.expense_number}</h3><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${color}`}>{statusNames[expense.status]}</span><span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs text-stone-700">{departmentNames[expense.department]}</span>{expense.reviewed_by && expense.reviewed_by === expense.submitted_by && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">Self-reviewed</span>}</div><p className="mt-1 text-sm">{expense.description}</p><p className="mt-1 text-xs text-stone-500">{expense.category} · {expense.payee} · Paid via {expense.paid_via} · Incurred {expense.incurred_on}</p>{expense.evidence_reference && <p className="mt-1 text-xs text-stone-500">Evidence: {expense.evidence_reference}</p>}{expense.review_note && <p className="mt-2 rounded-lg bg-stone-50 p-2 text-xs text-stone-600">Review note: {expense.review_note}</p>}</div><div className="flex shrink-0 items-center justify-between gap-3 sm:flex-col sm:items-end"><b>{formatNaira(expense.amount_kobo)}</b>{canReview && onReview && expense.status === "pending_review" && <button type="button" onClick={onReview} className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-semibold hover:bg-stone-50">Review</button>}</div></article>;
 }

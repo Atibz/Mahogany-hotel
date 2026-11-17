@@ -1,6 +1,6 @@
 \set ON_ERROR_STOP on
 
--- Local-only test for the paid-expense register and independent GM review.
+-- Local-only test for accountant self-review and independent GM review.
 -- All data changes are contained in one transaction and rolled back at the end.
 begin;
 
@@ -54,16 +54,14 @@ begin
     raise exception 'Expense submission did not create the expected pending record';
   end if;
 
-  begin
-    perform public.review_operating_expense(
-      submitted_expense.id, 'approved', 'Attempted self-approval'
-    );
-    raise exception 'Accountant unexpectedly reviewed an expense';
-  exception when others then
-    if sqlerrm not like '%Not authorised to review operating expenses%' then
-      raise;
-    end if;
-  end;
+  perform public.review_operating_expense(
+    submitted_expense.id, 'approved', 'Receipt reference checked by accountant'
+  );
+  if not exists (select 1 from public.operating_expenses
+    where id = submitted_expense.id and status = 'approved'
+      and reviewed_by = submitted_by) then
+    raise exception 'Accountant self-review was not recorded';
+  end if;
 end;
 $$;
 
@@ -94,33 +92,28 @@ begin
     );
     raise exception 'Submitter unexpectedly self-approved their expense';
   exception when others then
-    if sqlerrm not like '%The submitter cannot review their own expense%' then
+    if sqlerrm not like '%Only the accountant may review their own expense%' then
       raise;
     end if;
   end;
 
   begin
-    perform public.review_operating_expense(accountant_expense.id, 'approved', '  ');
+    perform public.review_operating_expense(gm_expense.id, 'approved', '  ');
     raise exception 'Expense unexpectedly accepted a blank review note';
   exception when others then
-    if sqlerrm not like '%A review note is required%' then
+    if sqlerrm not like '%A review note of at least 3 characters is required%' then
       raise;
     end if;
   end;
-
-  perform public.review_operating_expense(
-    accountant_expense.id, 'approved', 'Receipt reference checked by GM'
-  );
 
   if not exists (
     select 1 from public.operating_expenses
     where id = accountant_expense.id
       and status = 'approved'
-      and reviewed_by = auth.uid()
-      and review_note = 'Receipt reference checked by GM'
-      and submitted_by <> reviewed_by
+      and review_note = 'Receipt reference checked by accountant'
+      and submitted_by = reviewed_by
   ) then
-    raise exception 'GM review did not persist independent approval evidence';
+    raise exception 'Accountant self-review evidence was not preserved';
   end if;
 end;
 $$;

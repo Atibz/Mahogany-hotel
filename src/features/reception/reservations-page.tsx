@@ -162,10 +162,10 @@ export function ReservationsPage() {
       )
     : 0;
   const canReceiveDeposit = roleCodes.some((role) =>
-    ["owner", "general_manager", "receptionist", "cashier"].includes(role),
+    ["owner", "general_manager", "receptionist", "cashier", "accountant"].includes(role),
   );
-  const canAuthorizeCredit = roleCodes.some((role) => ["owner", "general_manager"].includes(role));
-  const canManageReservations = roleCodes.some((role) => ["owner", "general_manager", "receptionist"].includes(role));
+  const canAuthorizeCredit = roleCodes.some((role) => ["owner", "general_manager", "accountant"].includes(role));
+  const canManageReservations = roleCodes.some((role) => ["owner", "general_manager", "receptionist", "accountant"].includes(role));
   const noShowCutoff = noShowTarget ? noShowAllowedAfter(noShowTarget, cancellationPolicy.data) : null;
   const noShowHasCutoffData = Boolean(
     cancellationPolicy.data || (

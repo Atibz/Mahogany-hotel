@@ -79,7 +79,7 @@ export function FoliosPage() {
     ["owner", "general_manager", "receptionist"].includes(role),
   );
   const canManageAuditExceptions = roleCodes.some((role) =>
-    ["owner", "general_manager"].includes(role),
+    ["owner", "general_manager", "accountant"].includes(role),
   );
   const canCloseBusinessDay = canManageAuditExceptions;
   const nightAuditExceptions = useNightAuditExceptions(
@@ -98,7 +98,7 @@ export function FoliosPage() {
     ["owner", "general_manager", "accountant"].includes(role),
   );
   const canRecordPayment = roleCodes.some((role) =>
-    ["owner", "general_manager", "receptionist", "cashier"].includes(role),
+    ["owner", "general_manager", "receptionist", "cashier", "accountant"].includes(role),
   );
   const selected = folios.data?.find((folio) => folio.id === selectedId);
   const selectedMethod = methods.data?.find((method) => method.id === methodId);

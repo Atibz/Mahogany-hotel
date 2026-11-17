@@ -65,11 +65,11 @@ describe("role navigation policy", () => {
     expect(canRoleAccess(["receptionist"], "settings")).toBe(false);
   });
 
-  it("limits POS catalog administration to the Owner and General Manager", () => {
+  it("allows the accountant to administer the POS catalog", () => {
     expect(canRoleAccess(["owner"], "posCatalog")).toBe(true);
     expect(canRoleAccess(["general_manager"], "posCatalog")).toBe(true);
     expect(canRoleAccess(["receptionist"], "posCatalog")).toBe(false);
-    expect(canRoleAccess(["accountant"], "posCatalog")).toBe(false);
+    expect(canRoleAccess(["accountant"], "posCatalog")).toBe(true);
     expect(canRoleAccess(["restaurant_staff"], "posCatalog")).toBe(false);
     expect(canRoleAccess(["bar_staff"], "posCatalog")).toBe(false);
   });
@@ -98,18 +98,9 @@ describe("role navigation policy", () => {
     expect(canRoleAccess(["cashier"], "stays")).toBe(false);
   });
 
-  it("gives accountants finance and audit reporting without operations or staff management", () => {
-    expect(visible("accountant")).toEqual([
-      "dashboard",
-      "folios",
-      "payments",
-      "audit",
-      "businessAccounts",
-      "posSales",
-      "barSales",
-      "expenses",
-      "internalBalancing",
-    ]);
+  it("gives accountants GM-level pages without giving them the Owner role", () => {
+    expect(visible("accountant")).toEqual(features);
+    expect(canRoleAccess(["accountant"], "staff")).toBe(true);
   });
 
   it("limits inventory and supplier operations to Owner, GM, and Storekeeper", () => {
@@ -118,7 +109,7 @@ describe("role navigation policy", () => {
     expect(canRoleAccess(["managing_director"], "inventory")).toBe(true);
     expect(canRoleAccess(["managing_director"], "staff")).toBe(true);
     expect(canRoleAccess(["owner"], "inventory")).toBe(true);
-    expect(canRoleAccess(["accountant"], "inventory")).toBe(false);
+    expect(canRoleAccess(["accountant"], "inventory")).toBe(true);
     expect(canRoleAccess(["restaurant_staff"], "inventory")).toBe(false);
     expect(canRoleAccess(["bar_staff"], "inventory")).toBe(false);
     expect(canRoleAccess(["receptionist"], "inventory")).toBe(false);
@@ -129,6 +120,6 @@ describe("role navigation policy", () => {
 
   it("combines multiple assigned roles without weakening restrictions", () => {
     expect(canRoleAccess(["cashier", "accountant"], "audit")).toBe(true);
-    expect(canRoleAccess(["cashier", "accountant"], "staff")).toBe(false);
+    expect(canRoleAccess(["cashier", "accountant"], "staff")).toBe(true);
   });
 });

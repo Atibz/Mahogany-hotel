@@ -38,8 +38,8 @@ export function InventoryPage() {
   const [notice, setNotice] = useActionMessage<{ message: string; error?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const hotelId = hotel.data?.id;
-  const canManage = access.roleCodes.some((role) => ["owner", "general_manager", "storekeeper"].includes(role));
-  const canViewPosStock = access.roleCodes.some((role) => ["owner", "general_manager"].includes(role));
+  const canManage = access.roleCodes.some((role) => ["owner", "general_manager", "storekeeper", "accountant"].includes(role));
+  const canViewPosStock = access.roleCodes.some((role) => ["owner", "general_manager", "accountant"].includes(role));
 
   const items = useQuery({
     queryKey: ["inventory-items", hotelId], enabled: Boolean(supabase && hotelId),
